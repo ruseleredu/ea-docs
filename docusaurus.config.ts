@@ -250,28 +250,53 @@ const config: Config = {
           title: "Ferramentas",
           items: [
             {
-              label: "Karnaugh Map Solver",
-              href: "https://wredan.github.io/Karnaugh-Map-Solver/",
+              label: "LTspice",
+              href: "https://www.analog.com/en/resources/design-tools-and-calculators/ltspice-simulator.html",
+            },
+            {
+              label: "PSIM",
+              href: "https://altair.com/psim",
+            },
+            {
+              label: "SMath Studio",
+              href: "https://smath.com/en-US",
             },
             {
               label: "Tinkercad Circuits",
               href: "https://www.tinkercad.com/circuits",
             },
+          ],
+        },
+        {
+          title: "Doku Sites",
+          items: [
             {
-              label: "Logic circuit simplification",
-              href: "http://www.32x8.com/index.html",
+              label: "Main Site",
+              href: "https://adrianoruseler.github.io/site/",
             },
             {
-              label: "Quine McCluskey Solver",
-              href: "https://quinemccluskey.geeekyboy.com/",
+              label: "STM32 Docs",
+              href: "https://ruseleredu.github.io/stm32doc/",
             },
             {
-              label: "PlatformIO",
-              href: "https://platformio.org//install/ide?install=vscode",
+              label: "Sistemas Digitais",
+              href: "https://ruseleredu.github.io/sd-docs/",
             },
             {
-              label: "WinGet",
-              href: "https://winget.run/",
+              label: "Analógica",
+              href: "https://ruseleredu.github.io/ea-docs/",
+            },
+            {
+              label: "LabSEC",
+              href: "https://ruseleredu.github.io/labsec/",
+            },
+            {
+              label: "Moodle Docs",
+              href: "https://adrianoruseler.github.io/moodle-docs/",
+            },
+            {
+              label: "My Docs",
+              href: "https://adrianoruseler.github.io/my-docs/",
             },
           ],
         },
