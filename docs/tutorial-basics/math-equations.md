@@ -122,10 +122,11 @@ Enable KaTeX:
 3.  Include the KaTeX CSS in your config under `stylesheets`:
 
 - https://katex.org/docs/browser
+- https://katex.org/docs/browser#loading-as-global
 
 ```bash
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/katex.min.css" integrity="sha384-WcoG4HRXMzYzfCgiyfrySxx90XSl2rxY5mnVY5TwtWE6KLrArNKn0T/mOgNL0Mmi" crossorigin="anonymous">
-<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/katex.min.js" integrity="sha384-J+9dG2KMoiR9hqcFao0IBLwxt6zpcyN68IgwzsCSkbreXUjmNVRhPFTssqdSGjwQ" crossorigin="anonymous"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.css" integrity="sha384-ZPG16qaLEYhaeOLR/7TSh574xruFCYuPrEldfLjIeKY6Ydn71Mpb7UYzkc9g1YrU" crossorigin="anonymous">
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.js" integrity="sha384-t6DI6M9eGZH7T3G/OnFmKeIuD5g9lSHY+ZiOvCub8pkQmqioX1LmcZ9w3C0J+yMl" crossorigin="anonymous"></script>
 ```
 
 ```js
@@ -133,10 +134,10 @@ export default {
   //...
   stylesheets: [
     {
-      href: "https://cdn.jsdelivr.net/npm/katex@0.16.25/dist/katex.min.css",
+      href: "https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.css",
       type: "text/css",
       integrity:
-        "sha384-WcoG4HRXMzYzfCgiyfrySxx90XSl2rxY5mnVY5TwtWE6KLrArNKn0T/mOgNL0Mmi",
+        "sha384-ZPG16qaLEYhaeOLR/7TSh574xruFCYuPrEldfLjIeKY6Ydn71Mpb7UYzkc9g1YrU",
       crossorigin: "anonymous",
     },
   ],
@@ -172,10 +173,10 @@ export default {
   // highlight-start
   stylesheets: [
     {
-      href: "https://cdn.jsdelivr.net/npm/katex@0.13.24/dist/katex.min.css",
+      href: "https://cdn.jsdelivr.net/npm/katex@0.16.28/dist/katex.css",
       type: "text/css",
       integrity:
-        "sha384-odtC+0UGzzFL/6PNoE8rX/SPcQDXBJ+uRepguP4QkPCm2LBxH3FA3y+fKSiJ+AmM",
+        "sha384-ZPG16qaLEYhaeOLR/7TSh574xruFCYuPrEldfLjIeKY6Ydn71Mpb7UYzkc9g1YrU",
       crossorigin: "anonymous",
     },
   ],
