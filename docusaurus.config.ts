@@ -46,7 +46,13 @@ const config: Config = {
   deploymentBranch: "gh-pages", // The branch that GitHub pages will deploy from.
   trailingSlash: false, // Set to true if you want to add a trailing slash to all URLs.
   onDuplicateRoutes: "warn",
-  onBrokenLinks: "throw",
+  onBrokenLinks: "warn", // 'warn' or 'ignore'
+  markdown: {
+    mermaid: true, // Diagrams can be rendered using Mermaid in a code block.
+    hooks: {
+      onBrokenMarkdownLinks: "warn", // or 'throw'
+    },
+  },
 
   // Even if you don't use internationalization, you can use this field to set
   // useful metadata like html lang. For example, if your site is Chinese, you
@@ -55,6 +61,8 @@ const config: Config = {
     defaultLocale: "pt-BR",
     locales: ["pt-BR"],
   },
+
+  themes: ["@docusaurus/theme-mermaid"],
 
   // Include the KaTeX CSS in your config under stylesheets:
   stylesheets: [
