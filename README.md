@@ -91,3 +91,9 @@ npm i baseline-browser-mapping@latest -D
 ```bash
 npm audit fix
 ```
+
+## Install Chart.js and the React wrapper
+
+```bash
+npm install chart.js react-chartjs-2
+```
