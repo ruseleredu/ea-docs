@@ -26,6 +26,18 @@ function HomepageHeader() {
           </Link>
           <Link
             className="button button--secondary button--lg"
+            to="/ead/intro"
+          >
+            EaD 📝
+          </Link>
+          <Link
+            className="button button--secondary button--lg"
+            to="/lab/intro"
+          >
+            LABs 📝
+          </Link>
+          <Link
+            className="button button--secondary button--lg"
             to="/psim/intro"
           >
             PSIM 📝
@@ -36,12 +48,7 @@ function HomepageHeader() {
           >
             LTspice 📝
           </Link>
-          <Link
-            className="button button--secondary button--lg"
-            to="/docs/intro"
-          >
-            Docs 📝
-          </Link>
+
         </div>
       </div>
     </header>

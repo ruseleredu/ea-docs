@@ -1,0 +1,26 @@
+---
+title: Introdução
+description: Introdução as atividades de laboratório.
+sidebar_position: 1
+---
+
+import LabTable from '@site/src/components/LabTable';
+
+## LAB intro
+
+## Tabela dos LABs com links internos
+<div style={{ display: "flex", justifyContent: "center" }}>
+<LabTable internal={true} />
+</div>
+
+## Tabela dos LABs com links externos 
+<div style={{ display: "flex", justifyContent: "center" }}>
+<LabTable internal={false} />
+</div>
+
+
+## Calendário Acadêmico de 2026
+
+[Calendário Acadêmico de 2026](/pdf/CT2026.pdf)
+
+![Calendário Acadêmico de 2026](/img/CT2026.png)
