@@ -97,3 +97,7 @@ npm audit fix
 ```bash
 npm install chart.js react-chartjs-2
 ```
+
+## SVG Repo
+
+- https://www.svgrepo.com/collection/education-sephia-filled-icons/
