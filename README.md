@@ -2,6 +2,8 @@
 
 This website is built using [Docusaurus](https://docusaurus.io/), a modern static website generator.
 
+- https://adrianoruseler.github.io/site/docs/docusaurus/folder
+
 ## Installation
 
 - https://www.youtube.com/watch?v=ALDuHAi4F4A

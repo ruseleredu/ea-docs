@@ -19,7 +19,7 @@ const formatter = new Intl.DateTimeFormat("pt-BR", {
   hourCycle: "h23", // Use 24-hour format
 });
 const utc3Time = formatter.format(new Date());
-const COPYRIGHT_STRING = `Copyright © ${new Date().getFullYear()} sd-docs, Inc. Built with Docusaurus at ${utc3Time} UTC-3.`;
+const COPYRIGHT_STRING = `Copyright © ${new Date().getFullYear()} ea-docs, Inc. Built with Docusaurus at ${utc3Time} UTC-3.`;
 
 const config: Config = {
   title: "ELT82E - Eletrônica Analógica",
@@ -121,6 +121,8 @@ const config: Config = {
         routeBasePath: "psim", // Base URL for these docs (e.g., yoursite.com/psim/...)
         sidebarPath: require.resolve("./sidebars-psim.ts"), // Separate sidebar for PSIM docs
         // ... other options specific to your PSIM docs
+        showLastUpdateAuthor: true,
+        showLastUpdateTime: true,
       },
     ],
     [
@@ -132,6 +134,8 @@ const config: Config = {
         routeBasePath: "ltspice", // Base URL for these docs (e.g., yoursite.com/ltspice/...)
         sidebarPath: require.resolve("./sidebars-ltspice.ts"), // Separate sidebar for LTspice docs
         // ... other options specific to your LTspice docs
+        showLastUpdateAuthor: true,
+        showLastUpdateTime: true,
       },
     ],
   ],
