@@ -56,4 +56,3 @@ slug: /ELT72B/sim
 - [EAGLE](https://www.autodesk.com/products/eagle/overview)
 - [OrCAD](https://www.orcad.com/)
 - [Altium](https://www.altium.com/)
-  

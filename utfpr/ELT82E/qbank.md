@@ -6,7 +6,7 @@ description: Banco de questões da disciplina ELT82E.
 slug: /ELT82E/qbank
 ---
 
-## Sistames Digitais
+## Eletrônica Analógica
 
 ### Banco de questões
 

@@ -232,8 +232,8 @@ const config: Config = {
           position: "left",
           items: [
             {
-              to: "/utfpr/ELT72B/folder", // Link to a page in your UTFPR docs
-              label: "ELT72B - Sistemas Digitais",
+              to: "/utfpr/ELT82E/folder", // Link to a page in your UTFPR docs
+              label: "ELT82E - Eletrônica Analógica",
             },
           ],
         },
