@@ -111,6 +111,31 @@ const config: Config = {
     ],
   ],
 
+  plugins: [
+    [
+      "@docusaurus/plugin-content-docs",
+      /** @type {import('@docusaurus/plugin-content-docs').Options} */
+      {
+        id: "psim", // Unique ID for this docs instance
+        path: "psim", // Path to your PSIM docs folder
+        routeBasePath: "psim", // Base URL for these docs (e.g., yoursite.com/psim/...)
+        sidebarPath: require.resolve("./sidebars-psim.ts"), // Separate sidebar for PSIM docs
+        // ... other options specific to your PSIM docs
+      },
+    ],
+    [
+      "@docusaurus/plugin-content-docs",
+      /** @type {import('@docusaurus/plugin-content-docs').Options} */
+      {
+        id: "ltspice", // Unique ID for this docs instance
+        path: "ltspice", // Path to your LTspice docs folder
+        routeBasePath: "ltspice", // Base URL for these docs (e.g., yoursite.com/ltspice/...)
+        sidebarPath: require.resolve("./sidebars-ltspice.ts"), // Separate sidebar for LTspice docs
+        // ... other options specific to your LTspice docs
+      },
+    ],
+  ],
+
   themeConfig: {
     // Replace with your project's social card
     image: "img/docusaurus-social-card.jpg",
@@ -128,7 +153,19 @@ const config: Config = {
           type: "docSidebar",
           sidebarId: "tutorialSidebar",
           position: "left",
-          label: "Tutorial",
+          label: "Docs",
+        },
+        {
+          to: "/psim/intro", // Link to a page in your PSIM docs
+          label: "PSIM",
+          position: "left",
+          activeBaseRegex: `/psim/`, // Highlight when any PSIM doc is active
+        },
+        {
+          to: "/ltspice/intro", // Link to a page in your LTspice docs
+          label: "LTspice",
+          position: "left",
+          activeBaseRegex: `/ltspice/`, // Highlight when any LTspice doc is active
         },
         // { to: "/blog", label: "Blog", position: "left" },
         {

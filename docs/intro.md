@@ -4,6 +4,8 @@ sidebar_position: 1
 
 # Tutorial Intro
 
+- https://adrianoruseler.github.io/site/docs/docusaurus/folder
+
 Let's discover **Docusaurus in less than 5 minutes**.
 
 ## Getting Started
