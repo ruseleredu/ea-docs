@@ -48,6 +48,8 @@ int main() {
 }
 ```
 
+---
+
 ```c
 #include <stdio.h>
 
@@ -56,6 +58,8 @@ int main() {
   return 0;
 }
 ```
+
+---
 
 - `js`, `javascript`
 - https://www.w3schools.com/js/js_examples.asp
@@ -74,6 +78,8 @@ console.log(hobbies[0]); // Accessing array elements
 console.log(person.firstName); // Accessing object properties
 ```
 
+---
+
 - `tsx`
 - https://www.w3schools.com/typescript/
 
@@ -89,6 +95,8 @@ console.log(output1);
 console.log(output2);
 ```
 
+---
+
 - `java`
 - https://www.w3schools.com/java/java_examples.asp
 
@@ -101,6 +109,8 @@ public class Main {
   }
 }
 ```
+
+---
 
 - `python`, `py`
 - https://www.w3schools.com/python/python_examples.asp
@@ -123,6 +133,8 @@ number = 5
 print(f"The factorial of {number} is: {factorial(number)}")
 ```
 
+---
+
 - `sql`
 - https://www.w3schools.com/sql/sql_examples.asp
 
@@ -135,6 +147,8 @@ CREATE TABLE Employees (
     HireDate DATE
 );
 ```
+
+---
 
 - `json`
 
@@ -152,6 +166,8 @@ CREATE TABLE Employees (
 }
 ```
 
+---
+
 - `xml`
 - https://www.w3schools.com/xml/default.asp
 
@@ -164,6 +180,8 @@ CREATE TABLE Employees (
   <body>Don't forget me this weekend!</body>
 </note>
 ```
+
+---
 
 - `yml` or `yaml`
 
@@ -213,6 +231,8 @@ summary: >
   will appear as a single line
   when parsed.
 ```
+
+---
 
 - `tex`, `latex` and `context`
 

@@ -1,7 +1,7 @@
 ---
 id: ELT82E-qbank
 title: Banco de questões
-sidebar_position: 2
+sidebar_position: 3
 description: Banco de questões da disciplina ELT82E.
 slug: /ELT82E/qbank
 ---

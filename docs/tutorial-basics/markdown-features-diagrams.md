@@ -48,6 +48,8 @@ graph TD;
     C-->D;
 ```
 
+---
+
 ````md
 ```mermaid
    stateDiagram-v2
@@ -77,6 +79,8 @@ graph TD;
       join_state --> State4
       State4 --> [*]
 ```
+
+---
 
 ````md
 ```mermaid

@@ -1,7 +1,7 @@
 ---
 id: ELT72B-sim
 title: Simuladores
-sidebar_position: 3
+sidebar_position: 4
 description: Simuladores utilizados na disciplina ELT72B.
 slug: /ELT72B/sim
 ---
