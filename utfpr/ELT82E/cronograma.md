@@ -28,6 +28,8 @@ Apenas a nota final será lançada no sistema; As notas das provas e laboratóri
 
 - https://moodle.utfpr.edu.br/course/view.php?id=4785
 
+---
+
 ## Parte 01
 
 ### Introdução da disciplina.
