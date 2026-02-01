@@ -38,3 +38,8 @@
 [data-theme="dark"] .purple-text {
   color: plum;
 }
+
+/* Removes the external link icon specifically in the footer */
+.footer__link-item svg {
+  display: none;
+}
