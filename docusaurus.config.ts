@@ -353,6 +353,7 @@ const config: Config = {
             },
           ],
         },
+        /*
         {
           title: "Desenvolvedor",
           items: [
@@ -382,6 +383,7 @@ const config: Config = {
             },
           ],
         },
+        */
         {
           title: "Ferramentas",
           items: [
@@ -400,6 +402,35 @@ const config: Config = {
             {
               label: "Tinkercad Circuits",
               href: "https://www.tinkercad.com/circuits",
+            },
+          ],
+        },
+        {
+          title: "Moodle",
+          items: [
+            {
+              label: "Analógica",
+              href: "https://moodle.utfpr.edu.br/course/view.php?id=4785",
+            },
+            {
+              label: "Microcontrolados",
+              href: "https://moodle.utfpr.edu.br/course/view.php?id=29540",
+            },
+            {
+              label: "Digitais - EaD",
+              href: "https://moodle.utfpr.edu.br/course/view.php?id=27864",
+            },
+            {
+              label: "Digitais - LAB",
+              href: "https://moodle.utfpr.edu.br/course/view.php?id=28604",
+            },
+            {
+              label: "PSIM",
+              href: "https://moodle.utfpr.edu.br/course/view.php?id=12454",
+            },
+            {
+              label: "LTspice",
+              href: "https://moodle.utfpr.edu.br/course/view.php?id=12399",
             },
           ],
         },
