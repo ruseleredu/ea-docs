@@ -19,7 +19,8 @@ const formatter = new Intl.DateTimeFormat("pt-BR", {
   hourCycle: "h23", // Use 24-hour format
 });
 const utc3Time = formatter.format(new Date());
-const COPYRIGHT_STRING = `Copyright © ${new Date().getFullYear()} ea-docs, Inc. Built with Docusaurus at ${utc3Time} UTC-3.`;
+// const COPYRIGHT_STRING = `Copyright © ${new Date().getFullYear()} ea-docs, Inc. Built with Docusaurus at ${utc3Time} UTC-3.`;
+const COPYRIGHT_STRING = `Copyright © ${new Date().getFullYear()} ea-docs, Inc. Built with <a href="https://docusaurus.io/" style="color: #ffffff; font-weight: bold;" target="_blank" rel="noopener noreferrer">Docusaurus</a> at ${utc3Time} UTC-3.`;
 
 // 1. Import the labData array
 // https://gemini.google.com/share/c52111cbf825
