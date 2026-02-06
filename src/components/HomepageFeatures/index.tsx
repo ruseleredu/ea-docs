@@ -13,18 +13,78 @@ type FeatureItem = {
 const FeatureList: FeatureItem[] = [
   {
     title: (
-      <Link to="/utfpr/about">
-        school
+      <Link to="/utfpr/ELT72B/aulas">
+        Cronograma de Aulas
       </Link>
     ),
-    Svg: require('@site/static/img/school-svgrepo-com.svg').default,
+    Svg: require('@site/static/img/online-class-svgrepo-com.svg').default,
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        As aulas teóricas serão ministradas com o uso do quadro, slides e simuladores (<Link to="/psim/intro">PSIM</Link> e <Link to="/ltspice/intro">LTspice</Link>). Apenas a nota final será lançada no sistema, as notas das provas, questionários e laboratórios serão gerenciadas no <a href="https://moodle.utfpr.edu.br/course/view.php?id=27864" target="_blank">Moodle</a>.
       </>
     ),
   },
+  // <a href="https://moodle.utfpr.edu.br/course/view.php?id=27864" target="_blank">Moodle</a>
+  // <a href="https://moodle.utfpr.edu.br/course/view.php?id=27864" target="_blank">"Notas"</a>.
+  {
+    title: (
+      <Link to="/ead/intro">
+        Questionários
+      </Link>
+    ),
+    Svg: require('@site/static/img/question-and-answer-svgrepo-com.svg').default,
+    description: (
+      <>
+        Serão disponibilizados no <a href="https://moodle.utfpr.edu.br/course/view.php?id=27864" target="_blank">Moodle</a> e deverão ser respondidos individualmente. A resolução requer o uso dos simuladores <Link to="/psim/intro">PSIM</Link> e <Link to="/ltspice/intro">LTspice</Link>. As notas serão serão automaticamente contabilizadas e disponibilizadas na aba "Notas".
+      </>
+    ),
+  },
+  {
+    title: (
+      <Link to="/lab/intro">
+        Laboratórios
+      </Link>
+    ),
+    Svg: require('@site/static/img/operation-svgrepo-com.svg').default,
+    description: (
+      <>
+        As aulas práticas compõem da montagem de experimentos em laboratório das atividades listadas no <a href="https://moodle.utfpr.edu.br/course/view.php?id=27864" target="_blank">Moodle</a>. A montagem e resolução dos relatórios devem ser feitas em duplas, mas deverão ser respondidos individualmente.
+      </>
+    ),
+  },
+
+  /*
+{
+  title: (
+    <Link to="/docs/intro">
+      Documentação
+    </Link>
+  ),
+  Svg: require('@site/static/img/read-svgrepo-com.svg').default,
+  description: (
+    <>
+      Extend or customize your website layout by reusing React. Docusaurus can
+      be extended while reusing the same header and footer.
+    </>
+  ),
+},
+
+
+  {
+    title: (
+      <Link to="/lab/intro">
+        Simuladores
+      </Link>
+    ),
+    Svg: require('@site/static/img/time-svgrepo-com.svg').default,
+    description: (
+      <>
+        Extend or customize your website layout by reusing React. Docusaurus can
+        be extended while reusing the same header and footer.
+      </>
+    ),
+  },
+ 
   {
     title: 'certificate',
     Svg: require('@site/static/img/certificate-svgrepo-com.svg').default,
@@ -45,41 +105,8 @@ const FeatureList: FeatureItem[] = [
       </>
     ),
   },
-
-  {
-    title: 'operation',
-    Svg: require('@site/static/img/operation-svgrepo-com.svg').default,
-    description: (
-      <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
-      </>
-    ),
-  },
-
-
-  {
-    title: 'time',
-    Svg: require('@site/static/img/time-svgrepo-com.svg').default,
-    description: (
-      <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
-      </>
-    ),
-  },
-
-  {
-    title: 'question-and-answer',
-    Svg: require('@site/static/img/question-and-answer-svgrepo-com.svg').default,
-    description: (
-      <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
-      </>
-    ),
-  },
-
+ 
+ 
   {
     title: 'attend-class',
     Svg: require('@site/static/img/attend-class-svgrepo-com.svg').default,
@@ -90,18 +117,9 @@ const FeatureList: FeatureItem[] = [
       </>
     ),
   },
-
-  {
-    title: 'online-class',
-    Svg: require('@site/static/img/online-class-svgrepo-com.svg').default,
-    description: (
-      <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
-      </>
-    ),
-  },
-
+ 
+ 
+ 
   {
     title: 'math',
     Svg: require('@site/static/img/math-svgrepo-com.svg').default,
@@ -112,19 +130,8 @@ const FeatureList: FeatureItem[] = [
       </>
     ),
   },
-
-
-  {
-    title: 'read',
-    Svg: require('@site/static/img/read-svgrepo-com.svg').default,
-    description: (
-      <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
-      </>
-    ),
-  },
-
+ 
+ 
   {
     title: 'raise your hand',
     Svg: require('@site/static/img/raise-your-hand-svgrepo-com.svg').default,
@@ -135,7 +142,7 @@ const FeatureList: FeatureItem[] = [
       </>
     ),
   },
-
+ 
   {
     title: 'creativity',
     Svg: require('@site/static/img/creativity-svgrepo-com.svg').default,
@@ -146,12 +153,12 @@ const FeatureList: FeatureItem[] = [
       </>
     ),
   },
-
+*/
 ];
 
 function Feature({ title, Svg, description }: FeatureItem) {
   return (
-    <div className={clsx('col col--3')}>
+    <div className={clsx('col col--4')}>
       <div className="text--center">
         <Svg className={styles.featureSvg} role="img" />
       </div>
