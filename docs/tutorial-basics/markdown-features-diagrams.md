@@ -108,6 +108,23 @@ flowchart LR
   B -->|No| D[Stop]
 ```
 
+---
+
+````md
+```mermaid
+---
+config:
+  layout: elk
+  look: handDrawn
+  theme: neutral
+---
+flowchart TB
+  A[Start] --> B{Decision}
+  B -->|Yes| C[Continue]
+  B -->|No| D[Stop]
+```
+````
+
 ```mermaid
 ---
 config:
@@ -122,6 +139,32 @@ flowchart TB
 ```
 
 See the [Mermaid syntax documentation](https://mermaid-js.github.io/mermaid/#/./n00b-syntaxReference) for more information on the Mermaid syntax.
+
+---
+
+````md
+```mermaid
+---
+config:
+  layout: elk
+---
+erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+    CUSTOMER }|..|{ DELIVERY-ADDRESS : uses
+```
+````
+
+```mermaid
+---
+config:
+  layout: elk
+---
+erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+    CUSTOMER }|..|{ DELIVERY-ADDRESS : uses
+```
 
 ## Theming {#theming}
 
