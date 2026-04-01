@@ -144,6 +144,10 @@ const footer: ThemeConfig["footer"] = {
           label: "IESD",
           href: "https://iesd.adrianoruseler.com/",
         },
+        {
+          label: "CircuiTikZ",
+          href: "https://circuitikz.adrianoruseler.com/",
+        },
       ],
     },
     {
