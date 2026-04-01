@@ -140,6 +140,10 @@ const footer: ThemeConfig["footer"] = {
           label: "Tinkercad Circuits",
           href: "https://www.tinkercad.com/circuits",
         },
+        {
+          label: "IESD",
+          href: "https://iesd.adrianoruseler.com/",
+        },
       ],
     },
     {
