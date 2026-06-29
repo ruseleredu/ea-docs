@@ -18,7 +18,7 @@ const utc3Time = formatter.format(new Date());
 // Using consistent styling for links
 const linkStyle =
   'style="color: #ffffff; font-weight: bold;" target="_blank" rel="noopener noreferrer"';
-const gitlink = `<a href="https://github.com/ruseleredu/ea-docs" ${linkStyle}>ea-docs</a>`;
+const gitlink = `<a href="https://github.com/ruseleredu/ea-docs" ${linkStyle}>ELT82E</a>`;
 const docusaurusVersion = require("@docusaurus/core/package.json").version;
 const doclink = `<a href="https://docusaurus.io/" ${linkStyle}>Docusaurus</a>  v${docusaurusVersion}`;
 
