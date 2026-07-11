@@ -53,7 +53,7 @@
   },
   "license": "MIT",
   "allowScripts": {
-    "@swc/core@1.15.24": true,
-    "core-js@3.49.0": true
+    "core-js@3.49.0": true,
+    "@swc/core@1.15.43": true
   }
 }
