@@ -82,6 +82,13 @@ To upgrade Docusaurus packages with the latest version, run the following comman
 npm i @docusaurus/core@latest @docusaurus/preset-classic@latest @docusaurus/theme-mermaid@latest @docusaurus/module-type-aliases@latest @docusaurus/tsconfig@latest @docusaurus/types@latest
 ```
 
+If you trust these packages:
+
+```bash
+npm install-scripts approve @swc/core
+npm install-scripts approve core-js
+```
+
 To ensure accurate Baseline data, please update:
 
 ```bash
