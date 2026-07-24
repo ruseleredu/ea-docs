@@ -168,6 +168,12 @@ const config: Config = {
         // ... other options specific to your API docs
       },
     ],
+    [
+      "@cmfcmf/docusaurus-search-local",
+      {
+        // Options here
+      },
+    ],
   ],
 
   themeConfig: {
