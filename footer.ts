@@ -177,6 +177,10 @@ const footer: ThemeConfig["footer"] = {
           href: "https://moodle.utfpr.edu.br/course/view.php?id=28604",
         },
         {
+          label: "IIoT Industrial",
+          href: "https://moodle.utfpr.edu.br/course/view.php?id=35058",
+        },
+        {
           label: "PSIM",
           href: "https://moodle.utfpr.edu.br/course/view.php?id=12454",
         },
@@ -206,8 +210,8 @@ const footer: ThemeConfig["footer"] = {
           href: "https://ruseleredu.github.io/ea-docs/",
         },
         {
-          label: "LabSEC",
-          href: "https://ruseleredu.github.io/labsec/",
+          label: "Kroki Docs",
+          href: "https://ruseleredu.github.io/kroki-docs/",
         },
         {
           label: "Moodle Docs",
