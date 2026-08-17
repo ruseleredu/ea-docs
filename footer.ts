@@ -177,7 +177,7 @@ const footer: ThemeConfig["footer"] = {
           href: "https://moodle.utfpr.edu.br/course/view.php?id=28604",
         },
         {
-          label: "IIoT Industrial",
+          label: "IoT Industrial",
           href: "https://moodle.utfpr.edu.br/course/view.php?id=35058",
         },
         {
