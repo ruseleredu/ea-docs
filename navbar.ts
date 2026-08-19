@@ -35,7 +35,7 @@ const navbarItems: NavbarItem[] = [
   },
   {
     label: "UTFPR",
-    to: "/utfpr/about", // Link to a page in your UTFPR docs
+    to: "/utfpr/planejamento", // Link to a page in your UTFPR docs
     type: "dropdown",
     position: "left",
     items: [
