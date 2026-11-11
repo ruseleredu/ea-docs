@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interactive Explanations for Semiconductor Devices</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a contents page for the lab bench. Four device cards, each with its circuit symbol. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --ink: #17212b;
+  --muted: #5d6b79;
+  --line: #d5dce3;
+  --p: #c2416b;
+  --n: #2466b0;
+  --accent: #b06a00;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+    --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+  --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 16px; line-height: 1.5; }
+main { max-width: 960px; margin: 0 auto; padding: 32px 16px 48px; display: flex; flex-direction: column; gap: 24px; }
+h1 { font-family: var(--font-display); font-size: 34px; line-height: 1.15; margin: 0; text-wrap: balance; }
+header p { margin: 8px 0 0; color: var(--muted); max-width: 65ch; }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; list-style: none; margin: 0; padding: 0; }
+.card {
+  display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 16px; align-items: start; height: 100%;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 16px;
+  color: inherit; text-decoration: none;
+}
+.card:hover { border-color: var(--muted); }
+.card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.card svg { width: 84px; height: 84px; display: block; }
+.card svg * { vector-effect: non-scaling-stroke; }
+.sym { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.symf { fill: var(--ink); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.card h2 { margin: 0; font-size: 20px; font-weight: 600; }
+.card p { margin: 4px 0 0; color: var(--muted); font-size: 15px; }
+.tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.tag { font-family: var(--font-mono); font-size: 12px; padding: 1px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); }
+.open { margin-top: 10px; font-weight: 600; font-size: 14px; color: var(--accent); }
+.about { color: var(--muted); font-size: 14px; max-width: 80ch; }
+.about p { margin: 0 0 8px; }
+.about a { color: var(--ink); }
+@media (max-width: 720px) { .grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Interactive Explanations for Semiconductor Devices</h1>
+    <p>Eleven explorers that run in any modern browser with no plug-in. Each one shows the inside of the device, lets you change its voltages, and plots where it is operating on its characteristic curves.</p>
+  </header>
+
+  <ul class="grid">
+    <li>
+      <a class="card" href="diode.html">
+        <svg viewBox="0 0 84 84" aria-hidden="true">
+          <path class="sym" d="M6 42H30M54 42H78M54 26V58"/>
+          <path class="symf" d="M30 26V58L54 42Z"/>
+        </svg>
+        <div>
+          <h2>p-n diode</h2>
+          <p>Depletion region, diffusion and drift, the energy bands, and the current-voltage curve from reverse bias to the knee.</p>
+          <div class="tags"><span class="tag">−2 V to 0.7 V</span><span class="tag">highlight modes</span></div>
+          <div class="open">Open the diode explorer →</div>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="zener.html">
+        <svg viewBox="0 0 84 84" aria-hidden="true">
+          <path class="sym" d="M6 42H30M54 42H78M54 26V58M54 26L47 21M54 58L61 63"/>
+          <path class="symf" d="M30 26V58L54 42Z"/>
+        </svg>
+        <div>
+          <h2>Zener diode</h2>
+          <p>Reverse breakdown by tunnelling and avalanche, the load line of a series resistor, and how the diode holds its voltage.</p>
+          <div class="tags"><span class="tag">breakdown</span><span class="tag">load line</span></div>
+          <div class="open">Open the Zener explorer →</div>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="schottky.html">
+        <svg viewBox="0 0 84 84" aria-hidden="true">
+          <path class="sym" d="M6 42H30M54 42H78M54 26V58M54 26H60V31M54 58H48V53"/>
+          <path class="symf" d="M30 26V58L54 42Z"/>
+        </svg>
+        <div>
+          <h2>Schottky diode</h2>
+          <p>A metal-semiconductor junction: electrons over a barrier, a low forward voltage, more leakage and no stored charge.</p>
+          <div class="tags"><span class="tag">metal contact</span><span class="tag">fast switching</span></div>
+          <div class="open">Open the Schottky explorer →</div>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="led.html">
+        <svg viewBox="0 0 84 84" aria-hidden="true">
+          <path class="sym" d="M6 42H30M54 42H78M54 26V58M40 20L50 8M50 8L44 10M50 8L49 14.5M54 22L64 10M64 10L58 12M64 10L63 16.5"/>
+          <path class="symf" d="M30 26V58L54 42Z"/>
+        </svg>
+        <div>
+          <h2>Light-emitting diode</h2>
+          <p>Electrons and holes recombining into photons, and how the band gap sets the colour and the forward voltage.</p>
+          <div class="tags"><span class="tag">five materials</span><span class="tag">light output</span></div>
+          <div class="open">Open the LED explorer →</div>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="varactor.html">
+        <svg viewBox="0 0 84 84" aria-hidden="true">
+          <path class="sym" d="M6 42H30M60 42H78M54 26V58M60 26V58"/>
+          <path class="symf" d="M30 26V58L54 42Z"/>
+        </svg>
+        <div>
+          <h2>Varactor diode</h2>
+          <p>The reverse-biased depletion region as a capacitor whose value follows the voltage, tuning a resonant circuit.</p>
+          <div class="tags"><span class="tag">capacitance</span><span class="tag">tuned circuit</span></div>
+          <div class="open">Open the varactor explorer →</div>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="thyristor.html">
+        <svg viewBox="0 0 84 84" aria-hidden="true">
+          <path class="sym" d="M6 42H30M54 42H78M54 26V58M54 50L68 64V78"/>
+          <path class="symf" d="M30 26V58L54 42Z"/>
+        </svg>
+        <div>
+          <h2>Thyristor (SCR)</h2>
+          <p>Four layers and three junctions: forward and reverse blocking, gate triggering, latching, and the holding current.</p>
+          <div class="tags"><span class="tag">latching</span><span class="tag">load line</span></div>
+          <div class="open">Open the thyristor explorer →</div>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="bjt.html">
+        <svg viewBox="0 0 84 84" aria-hidden="true">
+          <path class="sym" d="M6 42H32M32 22V62M32 34L58 18V6M32 50L58 66V78"/>
+          <path class="symf" d="M58 66L46.5 64.5L51 57Z"/>
+        </svg>
+        <div>
+          <h2>Bipolar transistor</h2>
+          <p>Carrier injection across the base, recombination, and the cutoff, active and saturation regions on the output curves.</p>
+          <div class="tags"><span class="tag">npn</span><span class="tag">pnp</span></div>
+          <div class="open">Open the BJT explorer →</div>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="jfet.html">
+        <svg viewBox="0 0 84 84" aria-hidden="true">
+          <path class="sym" d="M6 54H36M36 22V62M36 30H60V6M36 54H60V78"/>
+          <path class="symf" d="M36 54L25 48.5V59.5Z"/>
+        </svg>
+        <div>
+          <h2>Junction FET</h2>
+          <p>Gate depletion regions squeezing the channel, pinch-off, and the ohmic and saturation regions with the transfer curve alongside.</p>
+          <div class="tags"><span class="tag">n-channel</span><span class="tag">p-channel</span></div>
+          <div class="open">Open the JFET explorer →</div>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="mesfet.html">
+        <svg viewBox="0 0 84 84" aria-hidden="true">
+          <path class="sym" d="M6 54H36M36 22V62M36 30H60V6M36 54H60V78"/>
+          <path class="symf" d="M36 54L25 48.5V59.5Z"/>
+        </svg>
+        <div>
+          <h2>MESFET</h2>
+          <p>A metal Schottky gate on gallium arsenide: the depletion region under the gate, velocity saturation, and the Statz model curves.</p>
+          <div class="tags"><span class="tag">GaAs</span><span class="tag">Schottky gate</span></div>
+          <div class="open">Open the MESFET explorer →</div>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="mosfet.html">
+        <svg viewBox="0 0 84 84" aria-hidden="true">
+          <path class="sym" d="M6 54H30M30 26V58M38 20V32M38 36V48M38 52V64M38 26H62V6M38 58H62V78M38 42H62V58"/>
+          <path class="symf" d="M38 42L49 36.5V47.5Z"/>
+        </svg>
+        <div>
+          <h2>Enhancement MOSFET</h2>
+          <p>Gate charge, the threshold, the inversion channel forming under the oxide, and the triode and saturation regions.</p>
+          <div class="tags"><span class="tag">n-channel</span><span class="tag">p-channel</span></div>
+          <div class="open">Open the MOSFET explorer →</div>
+        </div>
+      </a>
+    </li>
+    <li>
+      <a class="card" href="igbt.html">
+        <svg viewBox="0 0 84 84" aria-hidden="true">
+          <path class="sym" d="M6 42H28M28 26V58M34 22V62M34 34L58 18V6M34 50L58 66V78"/>
+          <path class="symf" d="M58 66L46.5 64.5L51 57Z"/>
+        </svg>
+        <div>
+          <h2>IGBT</h2>
+          <p>A MOSFET gate driving a bipolar current: channel formation, hole injection from the collector, and the on-state and active regions.</p>
+          <div class="tags"><span class="tag">MOSFET + pnp</span><span class="tag">power device</span></div>
+          <div class="open">Open the IGBT explorer →</div>
+        </div>
+      </a>
+    </li>
+  </ul>
+
+  <section class="about">
+    <p>These pages are written from scratch in HTML5 canvas and plain JavaScript. They cover the same ground as the Flash animations Edward Hill made in 2002/2003 for the first-year Linear Circuits and Devices course at the Cambridge University Engineering Department, later revised by Michael Khaw, and add the Zener, Schottky, light-emitting and varactor diodes, the thyristor, the bipolar transistor, the MESFET and the IGBT.</p>
+    <p>Each explorer uses an idealised textbook model and states its parameters and simplifications at the bottom of its page.</p>
+  </section>
+</main>
+</body>
+</html>

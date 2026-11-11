@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MESFET Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a lab bench. Device cross-section and characteristic curves side by side,
+   one control strip under them, readouts and explanation below. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --ink: #17212b;
+  --muted: #5d6b79;
+  --line: #d5dce3;
+  --p: #c2416b;        /* p-type, holes */
+  --n: #2466b0;        /* n-type, electrons */
+  --accent: #b06a00;   /* field, operating point, recombination */
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+    --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+  --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+}
+main { max-width: 1160px; margin: 0 auto; padding: 24px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+header h1 { font-family: var(--font-display); font-size: 30px; line-height: 1.15; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 65ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px; min-width: 0; }
+.panel h2 { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+canvas { display: block; width: 100%; height: 380px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.h { border: 2px solid var(--p); }
+.dot.e { background: var(--n); }
+.dot.r { border: 1.5px solid var(--accent); width: 13px; height: 13px; }
+.sw { width: 14px; height: 10px; border: 1px dashed var(--muted); display: inline-block; }
+
+.controls { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.row > label, .row > .lbl { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-width: 150px; }
+input[type="range"] { flex: 1 1 240px; min-width: 0; accent-color: var(--accent); height: 28px; }
+output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 18px; min-width: 86px; text-align: right; }
+button {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.group { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.readouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.tile .k { font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.tile .v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 22px; margin-top: 2px; }
+
+.explain h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.off { color: var(--muted); } .pill.ohm { color: var(--accent); } .pill.sat { color: var(--n); }
+.explain p { margin: 0 0 8px; max-width: 70ch; }
+.explain p:last-child { margin-bottom: 0; }
+.note { font-size: 13px; color: var(--muted); max-width: 90ch; margin: 0; }
+
+.h2row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.eqs { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; }
+.eqlist { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.eqrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 8px 10px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 4px; }
+.eqrow.on { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.eqrow .lbl2 { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.eq { font-family: "Cambria Math", "STIX Two Math", "Times New Roman", serif; font-size: 18px; line-height: 1.7; }
+.eq i { font-style: italic; }
+.eq .sp { font-family: var(--font-mono); font-size: 0.82em; }
+.eqnote { font-size: 13px; color: var(--muted); flex-basis: 100%; }
+.eqlive { margin: 10px 0 0; padding: 8px 10px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); font-size: 14px; overflow-x: auto; }
+.eqlive .eq { font-size: 17px; }
+.mdl { margin: 0; width: 230px; }
+.mdl svg { display: block; }
+.mdl .sym { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mdl .symf { fill: var(--ink); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.mdl text { font: 500 13px var(--font-mono); fill: var(--ink); }
+.mdl figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
+@media (max-width: 720px) { .eqs { grid-template-columns: minmax(0, 1fr); } }
+.head { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.symbol { flex: none; }
+.symbol svg { display: block; }
+.symbol .sym { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.symbol .symf { fill: var(--ink); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.symbol text { font: 500 13px var(--font-mono); fill: var(--muted); }
+.params { display: flex; flex-direction: column; gap: 10px; }
+.pgrid { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.pf { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.pf b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); font-size: 14px; }
+.pf input { font-family: var(--font-mono); font-size: 15px; width: 132px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+.pf input.bad { border-color: var(--p); outline: 1px solid var(--p); }
+.modelline { font-family: var(--font-mono); font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; margin: 0; }
+@media (max-width: 860px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  #iv { height: 300px; }
+  .readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .row > label, .row > .lbl { min-width: 100%; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header class="head">
+    <div>
+    <p style="margin:0 0 6px"><a href="index.html" style="color:inherit">← All devices</a></p>
+    <h1>MESFET Explorer</h1>
+    <p>Set the gate and drain voltages of a gallium arsenide MESFET and watch the depletion region under its metal gate squeeze the channel.</p>
+    </div>
+    <div class="symbol" id="sym"></div>
+  </header>
+
+  <section class="bench">
+    <div class="panel">
+      <h2>Inside the MESFET</h2>
+      <canvas id="dev" role="img" aria-label="Cross-section of a MESFET: a thin n-type gallium arsenide layer on a semi-insulating substrate, with source, Schottky gate and drain on top, the depletion region under the gate and electrons flowing beneath it"></canvas>
+      <div class="legend">
+        <span><i class="dot e"></i>electron</span>
+        <span><i class="sw"></i>depletion region</span>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="h2row">Transfer and output characteristics <span class="pill" id="ivPill"></span></h2>
+      <canvas id="iv" role="img" aria-label="Drain current against gate voltage on the left and against drain voltage on the right, with the present operating point marked"></canvas>
+    </div>
+  </section>
+
+  <section class="panel controls">
+    <div class="row">
+      <label for="vgs">Gate-source voltage</label>
+      <input type="range" id="vgs" min="-2.5" max="0" step="0.05" value="-0.5">
+      <output id="vgsOut" for="vgs">−0.50 V</output>
+    </div>
+    <div class="row">
+      <label for="vds">Drain-source voltage</label>
+      <input type="range" id="vds" min="0" max="6" step="0.05" value="3">
+      <output id="vdsOut" for="vds">+3.00 V</output>
+    </div>
+    <div class="row">
+      <span class="lbl">Jump to</span>
+      <div class="group" id="presets">
+        <button type="button" data-g="1.125" data-v="1.5">Cutoff</button>
+        <button type="button" data-g="0.25" data-v="0.25">Linear</button>
+        <button type="button" data-g="0.25" data-v="2">Saturation</button>
+        <button type="button" data-g="0" data-v="2.5">Gate at 0 V</button>
+      </div>
+      <button type="button" id="pause" aria-pressed="false">Pause</button>
+    </div>
+  </section>
+
+  <section class="panel params">
+    <h2>Model parameters (SPICE names)</h2>
+    <div class="pgrid" id="pgrid"></div>
+    <pre class="modelline" id="mline"></pre>
+    <div class="row">
+      <button type="button" id="pReset">Reset to defaults</button>
+      <p class="note" id="perr" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="readouts">
+    <div class="tile"><div class="k">Drain current</div><div class="v" id="rID">0 A</div></div>
+    <div class="tile"><div class="k">Gate current</div><div class="v">≈ 0</div></div>
+    <div class="tile"><div class="k">Drain voltage ÷ current</div><div class="v" id="rR">n/a</div></div>
+    <div class="tile"><div class="k">Current saturates at</div><div class="v" id="rP">3.00 V</div></div>
+  </section>
+
+  <section class="panel explain" aria-live="polite">
+    <h3><span id="exTitle">What is happening</span><span class="pill sat" id="exPill">Saturation</span></h3>
+    <p id="exText"></p>
+    <p id="exDir"></p>
+  </section>
+
+  <section class="panel">
+    <h2>Equations and model</h2>
+    <div class="eqs">
+      <ul class="eqlist">
+        <li class="eqrow" data-reg="off"><span class="pill off">Cutoff</span><span class="eq"><i>I</i><sub>D</sub> = 0</span><span class="eqnote">When <i>V</i><sub>GS</sub> ≤ <span class="sp">VTO</span>.</span></li>
+        <li class="eqrow" data-reg="ohm"><span class="pill ohm">Linear</span><span class="eq"><i>I</i><sub>D</sub> = <span class="sp">BETA</span> · (<i>V</i><sub>GS</sub> − <span class="sp">VTO</span>)<sup>2</sup> / (1 + <span class="sp">B</span> · (<i>V</i><sub>GS</sub> − <span class="sp">VTO</span>)) · (1 − (1 − <span class="sp">ALPHA</span> · <i>V</i><sub>DS</sub> / 3)<sup>3</sup>) · (1 + <span class="sp">LAMBDA</span> · <i>V</i><sub>DS</sub>)</span><span class="eqnote">When <i>V</i><sub>GS</sub> &gt; <span class="sp">VTO</span> and <i>V</i><sub>DS</sub> &lt; 3 / <span class="sp">ALPHA</span>.</span></li>
+        <li class="eqrow" data-reg="sat"><span class="pill sat">Saturation</span><span class="eq"><i>I</i><sub>D</sub> = <span class="sp">BETA</span> · (<i>V</i><sub>GS</sub> − <span class="sp">VTO</span>)<sup>2</sup> / (1 + <span class="sp">B</span> · (<i>V</i><sub>GS</sub> − <span class="sp">VTO</span>)) · (1 + <span class="sp">LAMBDA</span> · <i>V</i><sub>DS</sub>)</span><span class="eqnote">When <i>V</i><sub>GS</sub> &gt; <span class="sp">VTO</span> and <i>V</i><sub>DS</sub> ≥ 3 / <span class="sp">ALPHA</span>.</span></li>
+        <li class="eqrow"><span class="lbl2">Zero-gate-voltage current</span><span class="eq"><i>I</i><sub>DSS</sub> = <span class="sp">BETA</span> · <span class="sp">VTO</span><sup>2</sup> / (1 − <span class="sp">B</span> · <span class="sp">VTO</span>)</span><span class="eqnote">These are the Statz equations used by the SPICE3 MESFET model. <span class="sp">B</span> bends the square law toward a straight line at high gate drive, as velocity saturation does, and <span class="sp">ALPHA</span> sets the drain voltage 3 / <span class="sp">ALPHA</span> at which the current saturates. The gate current is taken as zero.</span></li>
+      </ul>
+      <figure class="mdl" id="mdl"></figure>
+    </div>
+    <p class="eqlive" id="eqLive"></p>
+  </section>
+
+  <p class="note">Model: the SPICE3 n-channel MESFET (Statz) drain-current equations with the parameters above. No gate conduction, so the gate is limited to 0 V and below; no breakdown, no capacitances and no source or drain resistance. The depletion-region shape is a simplified sketch that assumes a 0.8 V Schottky barrier, and carrier speeds are compressed so that small and large currents are both visible. The readouts and curves use the equations.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- Device model: SPICE3 MESFET (Statz) ----------
+  var P = { VTO: -2, BETA: 2.5e-3, B: 0.3, ALPHA: 2, LAMBDA: 0.02 };
+  var SPEC = [
+    { k: 'VTO', d: 'pinch-off voltage (V)', def: -2, min: -5, max: -0.5 },
+    { k: 'BETA', d: 'transconductance parameter (A/V²)', def: 2.5e-3, min: 1e-4, max: 5e-2 },
+    { k: 'B', d: 'doping tail parameter (1/V)', def: 0.3, min: 0, max: 2 },
+    { k: 'ALPHA', d: 'saturation voltage parameter (1/V)', def: 2, min: 0.5, max: 6 },
+    { k: 'LAMBDA', d: 'channel-length modulation (1/V)', def: 0.02, min: 0, max: 0.2 }
+  ];
+  var M = { VP: 2, beta: 2.5e-3, b: 0.3, alpha: 2, lam: 0.02 }, IMAX = 7e-3;
+  // g = reverse gate bias magnitude (VGS = -g), v = drain-source voltage
+  function idOf(g, v) {
+    var vov = M.VP - g; if (vov <= 0 || v <= 0) return 0;
+    var q = 1 - M.alpha * v / 3;
+    return M.beta * vov * vov / (1 + M.b * vov) * (q > 0 ? 1 - q * q * q : 1) * (1 + M.lam * v);
+  }
+
+  function fmtI(I) {
+    var a = Math.abs(I);
+    if (a < 5e-10) return '0 A';
+    if (a < 1e-3) return (a * 1e6).toFixed(a * 1e6 >= 100 ? 0 : 1) + ' µA';
+    return (a * 1e3).toFixed(2) + ' mA';
+  }
+  function fmtR(r) {
+    if (!isFinite(r)) return 'open';
+    if (r >= 1e6) return (r / 1e6).toFixed(1) + ' MΩ';
+    if (r >= 1e3) return (r / 1e3).toFixed(2) + ' kΩ';
+    return r.toFixed(0) + ' Ω';
+  }
+  function sv(x, plus) { return (x < -0.004 ? '−' : (x > 0.004 && plus ? '+' : '')) + Math.abs(x).toFixed(2) + ' V'; }
+
+  // ---------- State ----------
+  var pol = 'n', G = 0.5, VDS = 3, paused = false, ID = idOf(0.5, 3), reg = 'sat';
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var $ = function (id) { return document.getElementById(id); };
+  var dev = $('dev'), iv = $('iv');
+  var dctx = dev.getContext('2d'), ictx = iv.getContext('2d');
+  var col = {};
+
+  function readTheme() {
+    var s = getComputedStyle(document.documentElement);
+    ['bg', 'surface', 'ink', 'muted', 'line', 'p', 'n', 'accent'].forEach(function (k) {
+      col[k] = s.getPropertyValue('--' + k).trim();
+    });
+  }
+  readTheme();
+  setInterval(readTheme, 700);
+
+  function fit(c, ctx) {
+    var r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    var w = Math.max(200, Math.round(r.width)), h = Math.round(r.height);
+    if (c.width !== w * d || c.height !== h * d) { c.width = w * d; c.height = h * d; }
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    return { w: w, h: h };
+  }
+  var FONT = '"IBM Plex Sans", system-ui, sans-serif';
+  var MONO = '"IBM Plex Mono", ui-monospace, monospace';
+
+  function recompute() {
+    ID = idOf(G, VDS);
+    var vov = M.VP - G;
+    reg = vov <= 0 ? 'off' : (VDS < 3 / M.alpha ? 'ohm' : 'sat');
+  }
+
+  // ---------- Geometry (normalised 0..1): a thin active layer between the surface YT and the substrate YB ----------
+  var GX0 = 0.34, GX1 = 0.66, YT = 0.30, YB = 0.62, A = YB - YT, VBI = 0.8;
+  function satLen() { var k = 3 / M.alpha; return (M.VP > G && VDS > k) ? Math.min(0.3, 0.06 * (VDS - k)) : 0; }
+  // Depletion depth under the Schottky gate as a fraction of the active-layer thickness.
+  function dfrac(xn) {
+    var t = (xn - GX0) / (GX1 - GX0);
+    if (t <= 0 || t >= 1) return 0;
+    var e = Math.max(0, Math.min(1, Math.min(t, 1 - t) / 0.06)), d, vov = M.VP - G;
+    if (vov <= 0) d = 1;
+    else d = Math.min(0.93, Math.sqrt((VBI + G + 0.5 * Math.min(VDS, vov) * Math.pow(t, 1.5)) / (VBI + M.VP)));
+    return d * e;
+  }
+  function topAt(xn) { return YT + A * dfrac(xn); }
+  function openAt(xn) { return YB - topAt(xn); }
+
+  // ---------- Carriers ----------
+  var N = 70, cs = [];
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  (function init() { for (var i = 0; i < N; i++) cs.push({ x: rnd(0.01, 0.99), r: Math.random(), vr: 0, a: 1 }); })();
+
+  function step(dt) {
+    var vd = ID > 0 ? 0.05 + 0.3 * Math.pow(Math.min(1, ID / IMAX), 0.6) : 0, q = Math.sqrt(dt);
+    cs.forEach(function (c) {
+      c.a = Math.min(1, c.a + dt * 3);
+      var o = openAt(c.x);
+      if (o < 0.012) c.x += (c.x < 0.5 ? -1 : 1) * 0.4 * dt;            // layer fully depleted here: carriers are pushed out
+      else c.x += vd * Math.min(8, A / o) * dt + (Math.random() - 0.5) * 0.07 * q;
+      c.vr += (Math.random() - 0.5) * 2 * q; c.vr *= 1 - 2 * dt; c.r += c.vr * dt;
+      if (c.r > 1) { c.r = 1; c.vr = -Math.abs(c.vr); }
+      if (c.r < 0) { c.r = 0; c.vr = Math.abs(c.vr); }
+      if (c.x > 0.992) { c.x = 0.008; c.r = Math.random(); c.a = 0; }   // leaves at the drain, replaced at the source
+      if (c.x < 0.008) c.x = 0.008;
+    });
+  }
+
+  // ---------- Drawing helpers ----------
+  function arrow(ctx, x1, y1, x2, y2, head) {
+    var a = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - head * Math.cos(a - 0.45), y2 - head * Math.sin(a - 0.45));
+    ctx.lineTo(x2 - head * Math.cos(a + 0.45), y2 - head * Math.sin(a + 0.45));
+    ctx.closePath(); ctx.fill();
+  }
+
+  // ---------- Drawing: device ----------
+  function drawDevice() {
+    var s = fit(dev, dctx), ctx = dctx, W = s.w;
+    ctx.clearRect(0, 0, W, s.h);
+    var x0 = 14, x1 = W - 14, dw = x1 - x0, y0 = -30, dh = 300;
+    var X = function (nx) { return x0 + nx * dw; }, Y = function (ny) { return y0 + ny * dh; };
+    var gx0 = X(GX0), gx1 = X(GX1), i, xn, pts = [];
+
+    // substrate and active layer
+    ctx.fillStyle = col.surface; ctx.fillRect(x0, Y(YT), dw, Y(1) - Y(YT));
+    ctx.fillStyle = col.muted; ctx.globalAlpha = 0.13; ctx.fillRect(x0, Y(YB), dw, Y(1) - Y(YB));
+    ctx.fillStyle = col.n; ctx.globalAlpha = 0.16; ctx.fillRect(x0, Y(YT), dw, Y(YB) - Y(YT));
+    ctx.globalAlpha = 0.22; ctx.fillRect(x0, Y(YT), X(0.22) - x0, Y(YT + 0.17) - Y(YT)); ctx.fillRect(X(0.78), Y(YT), x1 - X(0.78), Y(YT + 0.17) - Y(YT));
+    ctx.globalAlpha = 1;
+    // depletion region under the gate
+    for (i = 0; i <= 80; i++) { xn = GX0 + (GX1 - GX0) * i / 80; pts.push([X(xn), Y(topAt(xn))]); }
+    ctx.beginPath(); ctx.moveTo(gx0, Y(YT)); pts.forEach(function (p) { ctx.lineTo(p[0], p[1]); }); ctx.lineTo(gx1, Y(YT)); ctx.closePath();
+    ctx.fillStyle = col.surface; ctx.fill();
+    ctx.beginPath(); pts.forEach(function (p, j) { if (j) ctx.lineTo(p[0], p[1]); else ctx.moveTo(p[0], p[1]); });
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = col.muted; ctx.lineWidth = 1; ctx.stroke(); ctx.setLineDash([]);
+    // contacts
+    ctx.fillStyle = col.muted;
+    ctx.fillRect(X(0.03), Y(YT - 0.08), X(0.20) - X(0.03), Y(YT) - Y(YT - 0.08));
+    ctx.fillRect(X(0.80), Y(YT - 0.08), X(0.97) - X(0.80), Y(YT) - Y(YT - 0.08));
+    ctx.fillStyle = col.ink; ctx.fillRect(gx0, Y(YT - 0.08), gx1 - gx0, Y(YT) - Y(YT - 0.08));
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2; ctx.strokeRect(x0, Y(YT), dw, Y(1) - Y(YT));
+    ctx.lineWidth = 1; ctx.strokeStyle = col.muted; ctx.beginPath(); ctx.moveTo(x0, Y(YB)); ctx.lineTo(x1, Y(YB)); ctx.stroke();
+
+    // carriers
+    cs.forEach(function (c) {
+      var o = openAt(c.x); if (c.a <= 0.01 || o < 0.004) return;
+      ctx.globalAlpha = c.a; ctx.fillStyle = col.n; ctx.beginPath();
+      ctx.arc(X(c.x), Y(topAt(c.x) + 0.012 + c.r * Math.max(0, o - 0.024)), 3.4, 0, 6.2832); ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+
+    // labels
+    ctx.textBaseline = 'alphabetic'; ctx.font = '600 13px ' + FONT; ctx.fillStyle = col.n;
+    ctx.textAlign = 'left'; ctx.fillText('n+', x0 + 6, Y(YT) + 16); ctx.fillText('n GaAs', X(0.225), Y(YT) + 16);
+    ctx.textAlign = 'right'; ctx.fillText('n+', x1 - 6, Y(YT) + 16);
+    ctx.fillStyle = col.muted; ctx.textAlign = 'left'; ctx.fillText('semi-insulating GaAs substrate', x0 + 6, Y(1) - 10);
+    ctx.fillStyle = col.surface; ctx.font = '600 12px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('metal', (gx0 + gx1) / 2, Y(YT - 0.04));
+    ctx.textBaseline = 'alphabetic';
+    if (reg === 'sat') {
+      var px = X(GX1 - (GX1 - GX0) * (0.06 + satLen() * 0.5));
+      ctx.strokeStyle = col.accent; ctx.fillStyle = col.accent; ctx.lineWidth = 1.6;
+      arrow(ctx, px, Y(YB) + 24, px, Y(YB) - 3, 5);
+      ctx.font = '600 12px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('electrons at top speed', px, Y(YB) + 38);
+    }
+    // terminals
+    ctx.fillStyle = col.ink; ctx.font = '600 13px ' + FONT; ctx.textAlign = 'center';
+    ctx.fillText('source', X(0.115), Y(YT - 0.08) - 22); ctx.fillText('gate', X(0.5), Y(YT - 0.08) - 22); ctx.fillText('drain', X(0.885), Y(YT - 0.08) - 22);
+    ctx.font = '12px ' + MONO; ctx.fillStyle = col.muted;
+    ctx.fillText('0 V', X(0.115), Y(YT - 0.08) - 7); ctx.fillText(sv(-G, true), X(0.5), Y(YT - 0.08) - 7); ctx.fillText(sv(VDS, true), X(0.885), Y(YT - 0.08) - 7);
+
+    // currents (conventional direction: drain to source)
+    var cy = y0 + dh + 26;
+    ctx.strokeStyle = col.ink; ctx.fillStyle = col.ink; ctx.lineWidth = 1.6; ctx.font = '12px ' + MONO;
+    if (ID > 0) { arrow(ctx, x0 + 38, cy, x0, cy, 5); arrow(ctx, x1, cy, x1 - 38, cy, 5); }
+    ctx.textAlign = 'left'; ctx.fillText('IS ' + fmtI(ID), x0 + 46, cy + 4);
+    ctx.textAlign = 'right'; ctx.fillText('ID ' + fmtI(ID), x1 - 46, cy + 4);
+    ctx.fillStyle = col.muted; ctx.textAlign = 'center'; ctx.font = '12px ' + FONT;
+    ctx.fillText('IG ≈ 0', (x0 + x1) / 2, cy + 4);
+    ctx.fillText('The gate is metal placed directly on the semiconductor: a Schottky barrier.', (x0 + x1) / 2, cy + 30);
+  }
+
+  // ---------- Drawing: characteristics ----------
+  function drawIV() {
+    var s = fit(iv, ictx), ctx = ictx, W = s.w, H = s.h, n = pol === 'n';
+    ctx.clearRect(0, 0, W, H);
+    var L = 46, R = 44, T = 22, B = 38, pw = W - L - R, ph = H - T - B, sc = niceScale(idOf(0, 6)), ymax = sc.max;
+    var xc = L + pw * 0.3, xr = L + pw;
+    var XG = function (g) { return xc - g / (1.25 * M.VP) * (xc - L); };          // gate bias magnitude, 0 at the centre axis
+    var XD = function (v) { return xc + v / 6 * (xr - xc); };
+    var Y = function (I) { return T + ph - I / ymax * ph; };
+    var sg = n ? '−' : '+', sd = n ? '' : '−';
+
+    ctx.font = '11px ' + MONO; ctx.lineWidth = 1; ctx.textBaseline = 'middle';
+    sc.ticks.forEach(function (tk) {
+      var y = Y(tk.v); ctx.strokeStyle = col.line; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(xr, y); ctx.stroke();
+      ctx.fillStyle = col.muted; ctx.textAlign = 'right'; ctx.fillText(tk.s, L - 5, y);
+    });
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
+    [M.VP, M.VP / 2].forEach(function (g) {
+      var x = XG(g); ctx.strokeStyle = col.line; ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke();
+      ctx.fillStyle = col.muted; ctx.fillText(sg + parseFloat(g.toFixed(2)), x, T + ph + 15);
+    });
+    [0, 2, 4, 6].forEach(function (v) {
+      var x = XD(v); ctx.strokeStyle = col.line; ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke();
+      ctx.fillStyle = col.muted; ctx.fillText((v ? sd : '') + v, x, T + ph + 15);
+    });
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(L, T + ph); ctx.lineTo(xr, T + ph); ctx.moveTo(xc, T); ctx.lineTo(xc, T + ph); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.font = '12px ' + FONT;
+    ctx.textAlign = 'left'; ctx.fillText('gate voltage (V)', L, T + ph + 32);
+    ctx.textAlign = 'right'; ctx.fillText('drain voltage (V)', xr, T + ph + 32);
+    ctx.textAlign = 'left'; ctx.fillText('drain current', xc + 6, T - 6);
+    ctx.fillText('linear', xc + 6, T + 14);
+    ctx.textAlign = 'right'; ctx.fillText('saturation', xr - 4, T + 14);
+
+    // pinch-off locus
+    var v, y, i;
+    ctx.beginPath(); ctx.moveTo(XD(3 / M.alpha), T + 20); ctx.lineTo(XD(3 / M.alpha), T + ph);
+    ctx.setLineDash([5, 4]); ctx.strokeStyle = col.accent; ctx.globalAlpha = 0.7; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+
+    function outCurve(g) {
+      ctx.beginPath();
+      for (i = 0; i <= 200; i++) { v = 6 * Math.pow(i / 200, 1.6); y = Y(idOf(g, v)); if (i === 0) ctx.moveTo(XD(v), y); else ctx.lineTo(XD(v), y); }
+      ctx.stroke();
+    }
+    ctx.lineJoin = 'round'; ctx.font = '10px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    [0, 0.25, 0.5, 0.75].forEach(function (f) {
+      var g = f * M.VP;
+      ctx.strokeStyle = col.muted; ctx.globalAlpha = 0.55; ctx.lineWidth = 1; outCurve(g);
+      ctx.globalAlpha = 1; ctx.fillStyle = col.muted; ctx.fillText((g ? sg : '') + parseFloat(g.toFixed(2)) + ' V', xr + 5, Y(idOf(g, 6)));
+    });
+    ctx.textBaseline = 'alphabetic';
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 2.2; outCurve(G);
+
+    // transfer curves: square law (dashed) and the curve at the present drain voltage (solid)
+    function trCurve(fn) {
+      ctx.beginPath();
+      for (i = 0; i <= 100; i++) { var g = 1.25 * M.VP * i / 100; y = Y(fn(g)); if (i === 0) ctx.moveTo(XG(g), y); else ctx.lineTo(XG(g), y); }
+      ctx.stroke();
+    }
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = col.muted; ctx.lineWidth = 1;
+    trCurve(function (g) { return idOf(g, 6) / (1 + M.lam * 6) * (1 + M.lam * VDS); }); ctx.setLineDash([]);
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 2.2; trCurve(function (g) { return idOf(g, VDS); });
+
+    // operating point on both plots
+    var py = Y(ID), pxd = XD(VDS), pxg = XG(G);
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = col.accent; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pxg, py); ctx.lineTo(pxd, py);
+    ctx.moveTo(pxd, py); ctx.lineTo(pxd, T + ph); ctx.moveTo(pxg, py); ctx.lineTo(pxg, T + ph); ctx.stroke(); ctx.setLineDash([]);
+    [pxd, pxg].forEach(function (px) {
+      ctx.fillStyle = col.accent; ctx.beginPath(); ctx.arc(px, py, 5.5, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = col.surface; ctx.lineWidth = 2; ctx.stroke();
+    });
+    ctx.font = '500 13px ' + MONO; ctx.fillStyle = col.ink;
+    var left = VDS > 3; ctx.textAlign = left ? 'right' : 'left';
+    ctx.fillText(fmtI(ID), pxd + (left ? -10 : 10), Math.max(T + 26, py - 11));
+  }
+
+  // ---------- Text and readouts ----------
+  function updateText() {
+    decor();
+    var vov = M.VP - G, knee = 3 / M.alpha;
+    $('vgsOut').textContent = sv(-G, true); $('vdsOut').textContent = sv(VDS, true);
+    $('rID').textContent = fmtI(ID);
+    var r = vov <= 0 ? Infinity : (VDS > 0.02 ? VDS / ID : 1 / (M.beta * vov * vov / (1 + M.b * vov) * M.alpha));
+    $('rR').textContent = fmtR(r);
+    $('rP').textContent = knee.toFixed(2) + ' V';
+    var pill = $('exPill'), title, text;
+    if (reg === 'off') {
+      pill.textContent = 'Cutoff'; pill.className = 'pill off'; title = 'Channel closed';
+      text = 'The gate is a metal contact on n-type gallium arsenide. That junction is a Schottky barrier with a depletion region under it, much like the one under a JFET gate. With ' + G.toFixed(2) + ' V of reverse bias the depletion region reaches right through the thin active layer to the semi-insulating substrate, so no conducting path is left between source and drain.';
+    } else if (reg === 'ohm') {
+      pill.textContent = 'Linear'; pill.className = 'pill ohm'; title = 'A voltage-controlled resistor';
+      text = 'Electrons drift from source to drain through the part of the n-type layer left open beneath the depletion region. A more negative gate voltage deepens the depletion region and narrows that path. The drain voltage is below ' + knee.toFixed(2) + ' V, so the current still rises with it, much as it would through a resistor of about ' + fmtR(r) + '. The substrate under the layer is semi-insulating: it carries almost no current and adds very little capacitance, which is one reason a MESFET works at microwave frequencies.';
+    } else {
+      pill.textContent = 'Saturation'; pill.className = 'pill sat'; title = 'Electrons at their speed limit';
+      text = 'Above about ' + knee.toFixed(2) + ' V the current levels off, here at ' + fmtI(ID) + '. In gallium arsenide this happens before the channel pinches off. The field at the drain end of the gate becomes so strong that the electrons reach their maximum drift speed, and more drain voltage cannot move them any faster. The current is then set by the gate voltage, which fixes how deep the open channel is' + (G < 0.03 ? '; with the gate at 0 V this is the largest current the device passes in normal use' : '') + '. This is the region used for amplifiers.';
+    }
+    $('exTitle').textContent = title; $('exText').textContent = text;
+    $('exDir').textContent = 'A MESFET has neither a gate oxide nor a p-n junction at the gate. The gate current stays negligible only while the Schottky junction is reverse biased, so the gate is kept at or below 0 V relative to the source. Electrons carry the current from source to drain, and conventional current runs from drain to source.';
+  }
+
+  // ---------- SPICE model parameters, editable by the user ----------
+  var HINT = 'Press Enter after editing a value. Scientific notation such as 1e-14 is accepted.';
+  function fmtP(v) {
+    if (v === 0) return '0';
+    var a = Math.abs(v);
+    if (a < 1e-3 || a >= 1e5) return v.toExponential().replace('e+', 'e');
+    return String(parseFloat(v.toPrecision(6)));
+  }
+  // Axis maximum and tick labels for a current axis that must reach m amps.
+  function niceScale(m) {
+    m = Math.max(m, 1e-12);
+    var u = m < 1e-9 ? [1e12, 'pA'] : m < 1e-6 ? [1e9, 'nA'] : m < 1e-3 ? [1e6, 'µA'] : m < 1 ? [1e3, 'mA'] : [1, 'A'];
+    var v = m * u[0], mag = Math.pow(10, Math.floor(Math.log10(v))), n = v / mag;
+    var opt = [[1, 0.2], [2, 0.5], [2.5, 0.5], [4, 1], [5, 1], [6, 2], [8, 2], [10, 2]], i, o = opt[opt.length - 1];
+    for (i = 0; i < opt.length; i++) if (n <= opt[i][0] * 1.0001) { o = opt[i]; break; }
+    var top = o[0] * mag, st = o[1] * mag, ticks = [];
+    for (i = 1; i * st <= top * 1.0001; i++) ticks.push({ v: i * st / u[0], s: parseFloat((i * st).toPrecision(3)) + ' ' + u[1] });
+    return { max: top / u[0], ticks: ticks };
+  }
+  function symbolSvg(title, lines, arrowPath, labels) {
+    var s = '<svg viewBox="0 0 120 96" width="120" height="96" role="img" aria-label="' + title + '"><g transform="translate(18,6)">' +
+      '<path class="sym" d="' + lines + '"/><path class="symf" d="' + arrowPath + '"/></g>';
+    labels.forEach(function (l) { s += '<text x="' + l[1] + '" y="' + l[2] + '" text-anchor="' + (l[3] || 'start') + '">' + l[0] + '</text>'; });
+    return s + '</svg>';
+  }
+  var decorKey = '';
+  function decor() {
+    var d = describe(), key = d.model + d.symbol;
+    if (key === decorKey) return;
+    decorKey = key; $('mline').textContent = d.model; $('sym').innerHTML = d.symbol; $('mdl').innerHTML = d.circuit;
+  }
+  function buildParams() {
+    var grid = $('pgrid');
+    SPEC.forEach(function (p) {
+      var l = document.createElement('label'); l.className = 'pf';
+      var b = document.createElement('b'); b.textContent = p.k;
+      var sp = document.createElement('span'); sp.textContent = p.d;
+      var inp = document.createElement('input'); inp.type = 'text'; inp.inputMode = 'decimal'; inp.id = 'p_' + p.k;
+      inp.autocomplete = 'off'; inp.value = fmtP(P[p.k]);
+      inp.addEventListener('change', function () {
+        var v = parseFloat(inp.value.replace(',', '.'));
+        if (!isFinite(v) || v < p.min || v > p.max) {
+          inp.classList.add('bad');
+          $('perr').textContent = p.k + ' must be a number from ' + fmtP(p.min) + ' to ' + fmtP(p.max) + '.';
+          return;
+        }
+        inp.classList.remove('bad'); $('perr').textContent = HINT;
+        P[p.k] = v; inp.value = fmtP(v); applyParams();
+      });
+      l.appendChild(b); l.appendChild(sp); l.appendChild(inp); grid.appendChild(l);
+    });
+    $('perr').textContent = HINT;
+    $('pReset').addEventListener('click', function () {
+      SPEC.forEach(function (p) { P[p.k] = p.def; var e = $('p_' + p.k); e.value = fmtP(p.def); e.classList.remove('bad'); });
+      $('perr').textContent = HINT; applyParams();
+    });
+  }
+  function liveEq() {
+    var vov = M.VP - G;
+    function sg(x) { return (x < 0 ? '(−' + Math.abs(x).toFixed(2) + ')' : x.toFixed(2)); }
+    if (reg === 'off') return '<i>V</i><sub>GS</sub> = ' + sg(-G) + ' V ≤ VTO = ' + sg(P.VTO) + ' V, so <i>I</i><sub>D</sub> = 0';
+    var h = '<i>I</i><sub>D</sub> = ' + fmtP(P.BETA) + ' × ' + vov.toFixed(2) + '<sup>2</sup> / (1 + ' + fmtP(P.B) + ' × ' + vov.toFixed(2) + ')';
+    if (reg === 'ohm') h += ' × (1 − (1 − ' + fmtP(P.ALPHA) + ' × ' + VDS.toFixed(2) + ' / 3)<sup>3</sup>)';
+    return h + ' × ' + (1 + M.lam * VDS).toFixed(3) + ' = ' + fmtI(ID);
+  }
+  // ---------- Equations, equivalent circuit and region pill ----------
+  function circuitSvg(kind, flip, t, src, cap) {
+    function tx(x, y, str, anchor) { return '<text x="' + x + '" y="' + y + '" text-anchor="' + (anchor || 'start') + '">' + str + '</text>'; }
+    function sub(m, sb) { return m + '<tspan dy="4" font-size="10">' + sb + '</tspan>'; }
+    var s = '<svg viewBox="0 0 230 200" width="230" height="200" role="img" aria-label="' + cap + '">';
+    if (kind === 'diode') {
+      s += '<path class="sym" d="M20 100H92M124 100H206M124 82V118M34 80H62"/><path class="symf" d="M92 82V118L124 100Z"/><path class="symf" d="M66 80L57 75.5V84.5Z"/>';
+      s += tx(49, 68, sub('I', 'D'), 'middle') + tx(20, 124, 'A') + tx(206, 124, 'K', 'end') + tx(66, 152, '+') + tx(108, 152, sub('V', 'D'), 'middle') + tx(146, 152, '−');
+    } else {
+      s += '<path class="sym" d="M170 12V78M170 122V188"/><circle class="sym" cx="170" cy="100" r="22"/>';
+      s += flip ? '<path class="sym" d="M170 114V94"/><path class="symf" d="M170 85L165 95H175Z"/>'
+                : '<path class="sym" d="M170 86V106"/><path class="symf" d="M170 115L165 105H175Z"/>';
+      s += tx(200, 104, src) + tx(180, 22, t[1]) + tx(180, 186, t[2]) + tx(24, 92, t[0]);
+      if (kind === 'three') {
+        s += '<path class="sym" d="M24 100H80M80 100V40H170M80 100V160H170"/>';
+        s += flip ? '<path class="symf" d="M70 62H90L80 78Z"/><path class="sym" d="M70 78H90"/><path class="symf" d="M70 138H90L80 122Z"/><path class="sym" d="M70 122H90"/>'
+                  : '<path class="symf" d="M70 78H90L80 62Z"/><path class="sym" d="M70 62H90"/><path class="symf" d="M70 122H90L80 138Z"/><path class="sym" d="M70 138H90"/>';
+        s += '<circle class="symf" cx="80" cy="100" r="3"/><circle class="symf" cx="170" cy="40" r="3"/><circle class="symf" cx="170" cy="160" r="3"/>';
+        s += tx(62, 74, sub('D', t[0] + t[1]), 'end') + tx(62, 134, sub('D', t[0] + t[2]), 'end');
+      } else {
+        s += '<path class="sym" d="M24 100H94"/><circle class="sym" cx="99" cy="100" r="5"/>';
+        s += tx(99, 128, sub('I', 'G') + '<tspan dy="-4"> = 0</tspan>', 'middle');
+      }
+    }
+    return s + '</svg><figcaption>' + cap + '</figcaption>';
+  }
+  function syncReg() {
+    var p = $('exPill'), q = $('ivPill'), key = p.className.split(' ')[1];
+    q.textContent = p.textContent; q.className = p.className;
+    Array.prototype.forEach.call(document.querySelectorAll('.eqrow[data-reg]'), function (r) {
+      r.classList.toggle('on', r.getAttribute('data-reg').split(' ').indexOf(key) >= 0);
+    });
+    $('eqLive').innerHTML = 'With the present settings: <span class="eq">' + liveEq() + '</span>';
+  }
+  var baseUpdateText = updateText;
+  updateText = function () { baseUpdateText(); syncReg(); };
+  function describe() {
+    return {
+      model: '.model Z1 NMF(VTO=' + fmtP(P.VTO) + ' BETA=' + fmtP(P.BETA) + ' B=' + fmtP(P.B) + ' ALPHA=' + fmtP(P.ALPHA) + ' LAMBDA=' + fmtP(P.LAMBDA) + ')   ; IDSS = ' + fmtI(idOf(0, 3 / M.alpha) / (1 + M.lam * 3 / M.alpha)),
+      circuit: circuitSvg('three', false, ['G', 'D', 'S'], 'I<tspan dy="4" font-size="10">D</tspan>', 'SPICE large-signal model of the MESFET: two Schottky gate diodes, reverse biased in normal use, and a controlled current source.'),
+      symbol: symbolSvg('n-channel MESFET symbol with gate G, drain D and source S',
+        'M6 54H36M36 22V62M36 30H60V6M36 54H60V78', 'M36 54L25 48.5V59.5Z', [['G', 24, 52], ['D', 86, 18], ['S', 86, 84]])
+    };
+  }
+  function applyParams() {
+    M.VP = -P.VTO; M.beta = P.BETA; M.b = P.B; M.alpha = P.ALPHA; M.lam = P.LAMBDA;
+    IMAX = Math.max(1e-9, idOf(0, 6));
+    var e = $('vgs'); e.min = (-1.25 * M.VP).toFixed(2); e.step = M.VP < 2 ? 0.01 : 0.05;
+    G = Math.min(G, 1.25 * M.VP); e.value = -G;
+    refresh();
+  }
+
+  // ---------- Controls ----------
+  function refresh() { recompute(); updateText(); if (paused) render(); }
+  $('vgs').addEventListener('input', function (ev) { G = -parseFloat(ev.target.value); refresh(); });
+  $('vds').addEventListener('input', function (ev) { VDS = parseFloat(ev.target.value); refresh(); });
+  $('presets').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    G = parseFloat(b.dataset.g) * M.VP; VDS = Math.min(6, parseFloat(b.dataset.v) * M.VP);
+    $('vgs').value = -G; $('vds').value = VDS; refresh();
+  });
+  var last = 0;
+  function setPaused(p) {
+    paused = p; var b = $('pause');
+    b.textContent = p ? 'Play' : 'Pause'; b.setAttribute('aria-pressed', p ? 'true' : 'false');
+    last = 0;
+  }
+  $('pause').addEventListener('click', function () { setPaused(!paused); });
+
+  // ---------- Loop ----------
+  function render() { drawDevice(); drawIV(); }
+  function frame(t) {
+    if (!paused) {
+      var dt = last ? Math.min(0.05, (t - last) / 1000) : 0.016; last = t;
+      step(dt);
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+  buildParams(); applyParams();
+  if (reduced) setPaused(true);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thyristor Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a lab bench. Device cross-section and I-V curve side by side,
+   one control strip under them, readouts and explanation below. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --ink: #17212b;
+  --muted: #5d6b79;
+  --line: #d5dce3;
+  --p: #c2416b;        /* p-type, holes */
+  --n: #2466b0;        /* n-type, electrons */
+  --accent: #b06a00;   /* field, operating point */
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+    --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+  --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+}
+main { max-width: 1160px; margin: 0 auto; padding: 24px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+header h1 { font-family: var(--font-display); font-size: 30px; line-height: 1.15; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 65ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px; min-width: 0; }
+.panel h2 { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+canvas { display: block; width: 100%; height: 400px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.h { border: 2px solid var(--p); }
+.dot.e { background: var(--n); }
+.sw { width: 14px; height: 10px; border: 1px dashed var(--muted); display: inline-block; }
+.dot.ion { border: 1px solid var(--muted); width: 12px; height: 12px; font-size: 9px; line-height: 10px; text-align: center; color: var(--muted); }
+
+.controls { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.row > label, .row > .lbl { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-width: 130px; }
+input[type="range"] { flex: 1 1 260px; min-width: 0; accent-color: var(--accent); height: 28px; }
+output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 18px; min-width: 86px; text-align: right; }
+button {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.group { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.readouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.tile .k { font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.tile .v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 22px; margin-top: 2px; }
+
+.explain h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.rev { color: var(--n); } .pill.eq { color: var(--muted); } .pill.fwd { color: var(--p); } .pill.bd { color: var(--accent); } .pill.off { color: var(--muted); } .pill.on { color: var(--p); }
+.explain p { margin: 0; max-width: 70ch; }
+.note { font-size: 13px; color: var(--muted); max-width: 90ch; margin: 0; }
+
+.h2row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.eqs { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; }
+.eqlist { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.eqrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 8px 10px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 4px; }
+.eqrow.on { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.eqrow .lbl2 { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.eq { font-family: "Cambria Math", "STIX Two Math", "Times New Roman", serif; font-size: 18px; line-height: 1.7; }
+.eq i { font-style: italic; }
+.pill.eq { font-family: var(--font-body); font-size: 12px; line-height: 1.5; }
+.eq .sp { font-family: var(--font-mono); font-size: 0.82em; }
+.eqnote { font-size: 13px; color: var(--muted); flex-basis: 100%; }
+.eqlive { margin: 10px 0 0; padding: 8px 10px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); font-size: 14px; overflow-x: auto; }
+.eqlive .eq { font-size: 17px; }
+.mdl { margin: 0; width: 230px; }
+.mdl svg { display: block; }
+.mdl .sym { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mdl .symf { fill: var(--ink); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.mdl text { font: 500 13px var(--font-mono); fill: var(--ink); }
+.mdl figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
+@media (max-width: 720px) { .eqs { grid-template-columns: minmax(0, 1fr); } }
+.head { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.symbol { flex: none; }
+.symbol svg { display: block; }
+.symbol .sym { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.symbol .symf { fill: var(--ink); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.symbol text { font: 500 13px var(--font-mono); fill: var(--muted); }
+.params { display: flex; flex-direction: column; gap: 10px; }
+.pgrid { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.pf { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.pf b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); font-size: 14px; }
+.pf input { font-family: var(--font-mono); font-size: 15px; width: 132px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+.pf input.bad { border-color: var(--p); outline: 1px solid var(--p); }
+.modelline { font-family: var(--font-mono); font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; margin: 0; }
+@media (max-width: 860px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  #iv { height: 300px; }
+  .readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+</head>
+<body>
+<main>
+  <header class="head">
+    <div>
+    <p style="margin:0 0 6px"><a href="index.html" style="color:inherit">← All devices</a></p>
+    <h1>Thyristor Explorer</h1>
+    <p>Put a thyristor (SCR) in series with a load, fire it with gate current, and see why it stays on until the anode current is taken away.</p>
+    </div>
+    <div class="symbol" id="sym"></div>
+  </header>
+
+  <section class="bench">
+    <div class="panel">
+      <h2>Inside the thyristor</h2>
+      <canvas id="dev" role="img" aria-label="Cross-section of a four-layer p-n-p-n thyristor with anode, gate and cathode, its three junctions, depletion regions and moving carriers"></canvas>
+      <div class="legend">
+        <span><i class="dot h"></i>hole</span>
+        <span><i class="dot e"></i>electron</span>
+        <span><i class="sw"></i>depletion region</span>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="h2row">Anode current against voltage <span class="pill" id="ivPill"></span></h2>
+      <canvas id="iv" role="img" aria-label="Thyristor current-voltage characteristic with the load line and the present operating point"></canvas>
+    </div>
+  </section>
+
+  <section class="panel controls">
+    <div class="row">
+      <label for="bias">Supply voltage</label>
+      <input type="range" id="bias" min="-120" max="120" step="1" value="60">
+      <output id="biasOut" for="bias">+60 V</output>
+    </div>
+    <div class="row">
+      <label for="rl">Load resistor</label>
+      <input type="range" id="rl" min="200" max="5000" step="50" value="1000">
+      <output id="rlOut" for="rl">1.00 kΩ</output>
+    </div>
+    <div class="row">
+      <label for="ig">Gate current</label>
+      <input type="range" id="ig" min="0" max="0.5" step="0.01" value="0">
+      <output id="igOut" for="ig">0.00 mA</output>
+    </div>
+    <div class="row">
+      <span class="lbl">Try in order</span>
+      <div class="group" id="presets">
+        <button type="button" data-k="block">1. Block</button>
+        <button type="button" data-k="fire">2. Fire the gate</button>
+        <button type="button" data-k="hold">3. Remove gate current</button>
+        <button type="button" data-k="off">4. Starve it</button>
+        <button type="button" data-k="rev">Reverse</button>
+      </div>
+      <button type="button" id="pause" aria-pressed="false">Pause</button>
+    </div>
+  </section>
+
+  <section class="panel params">
+    <h2>Model parameters (PSpice SCR names)</h2>
+    <div class="pgrid" id="pgrid"></div>
+    <pre class="modelline" id="mline"></pre>
+    <div class="row">
+      <button type="button" id="pReset">Reset to defaults</button>
+      <p class="note" id="perr" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="readouts">
+    <div class="tile"><div class="k">Anode-cathode voltage</div><div class="v" id="rV">0 V</div></div>
+    <div class="tile"><div class="k">Anode current</div><div class="v" id="rI">0 A</div></div>
+    <div class="tile"><div class="k">Breakover voltage now</div><div class="v" id="rBO">100 V</div></div>
+    <div class="tile"><div class="k">Power dissipated</div><div class="v" id="rP">0 mW</div></div>
+  </section>
+
+  <section class="panel explain" aria-live="polite">
+    <h3><span id="exTitle">What is happening</span><span class="pill off" id="exPill">Forward blocking</span></h3>
+    <p id="exText"></p>
+  </section>
+
+  <section class="panel">
+    <h2>Equations and model</h2>
+    <div class="eqs">
+      <ul class="eqlist">
+        <li class="eqrow"><span class="lbl2">Two-transistor model</span><span class="eq"><i>I</i><sub>A</sub> = (α<sub>npn</sub> · <i>I</i><sub>G</sub> + <i>I</i><sub>CO</sub>) / (1 − (α<sub>pnp</sub> + α<sub>npn</sub>))</span><span class="eqnote">The four layers act as a pnp and an npn transistor, each feeding the other's base. Their gains α rise with current. When the sum reaches 1 the denominator vanishes and the device latches on. <i>I</i><sub>CO</sub> is the leakage of the middle junction.</span></li>
+        <li class="eqrow"><span class="lbl2">Load line</span><span class="eq"><i>V</i><sub>S</sub> = <i>V</i><sub>AK</sub> + <i>I</i><sub>A</sub> · <i>R</i></span><span class="eqnote">The operating point is where this line meets the branch the thyristor is on.</span></li>
+        <li class="eqrow" data-reg="off"><span class="pill off">Forward blocking</span><span class="eq"><i>I</i><sub>A</sub> ≈ <span class="sp">Idrm</span> · <i>V</i><sub>AK</sub> / <span class="sp">Vdrm</span></span><span class="eqnote">It turns on when <i>V</i><sub>AK</sub> reaches the breakover voltage <i>V</i><sub>BO</sub> = <span class="sp">Vdrm</span> · (1 − <i>I</i><sub>G</sub> / <span class="sp">Igt</span>), which gate current pulls down to about 1 V.</span></li>
+        <li class="eqrow" data-reg="on"><span class="pill on">Conducting</span><span class="eq"><i>V</i><sub>AK</sub> = <i>V</i><sub>T0</sub> + <i>I</i><sub>A</sub> · (<span class="sp">Vtm</span> − <i>V</i><sub>T0</sub>) / <span class="sp">Itm</span></span><span class="eqnote">A threshold of <i>V</i><sub>T0</sub> = 0.9 V plus a small resistance, passing through <span class="sp">Vtm</span> at <span class="sp">Itm</span>. It stays on, with or without gate current, while <i>I</i><sub>A</sub> ≥ <span class="sp">Ih</span>.</span></li>
+        <li class="eqrow" data-reg="rev"><span class="pill rev">Reverse blocking</span><span class="eq"><i>I</i><sub>A</sub> ≈ −<span class="sp">Idrm</span> · |<i>V</i><sub>AK</sub>| / <span class="sp">Vrrm</span></span><span class="eqnote">Gate current has no effect in this direction.</span></li>
+        <li class="eqrow" data-reg="bd"><span class="pill bd">Reverse breakdown</span><span class="eq">|<i>V</i><sub>AK</sub>| &gt; <span class="sp">Vrrm</span></span><span class="eqnote">The current is limited only by the load. A real device is usually destroyed here.</span></li>
+      </ul>
+      <figure class="mdl" id="mdl"></figure>
+    </div>
+    <p class="eqlive" id="eqLive"></p>
+  </section>
+
+  <p class="note">Model: a static behavioural model with the parameter names of the PSpice SCR subcircuit. Blocking is a small linear leakage, breakover falls linearly with gate current, and the on state is a 0.9 V threshold plus a resistance. Switching times, dV/dt triggering, the gate voltage and the difference between latching and holding current are left out. The thyristor remembers whether it is on, so the same slider settings can give two different states depending on how you got there. Depletion widths and carrier numbers in the cross-section are sketches; the readouts and the curve use the model.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- Device model ----------
+  var P = { VDRM: 100, VRRM: 100, IGT: 2e-4, IH: 5e-3, VTM: 1.6, ITM: 0.1, IDRM: 1e-5 };
+  var SPEC = [
+    { k: 'VDRM', d: 'forward breakover voltage (V)', def: 100, min: 20, max: 1000 },
+    { k: 'VRRM', d: 'reverse breakdown voltage (V)', def: 100, min: 20, max: 1000 },
+    { k: 'IGT', d: 'gate trigger current (A)', def: 2e-4, min: 2e-5, max: 5e-4 },
+    { k: 'IH', d: 'holding current (A)', def: 5e-3, min: 1e-4, max: 5e-2 },
+    { k: 'VTM', d: 'on-state voltage (V)', def: 1.6, min: 1, max: 3 },
+    { k: 'ITM', d: 'on-state current for VTM (A)', def: 0.1, min: 0.01, max: 10 },
+    { k: 'IDRM', d: 'blocking current at VDRM (A)', def: 1e-5, min: 1e-8, max: 1e-4 }
+  ];
+  var VT0 = 0.9, RBR = 2;
+  function ron() { return Math.max(0.01, (P.VTM - VT0) / P.ITM); }
+  function vbo(ig) { return Math.max(VT0 + 0.3, P.VDRM * (1 - ig / P.IGT)); }
+  // Blocking branch: forward leakage, reverse leakage and reverse breakdown.
+  function iOff(v) {
+    if (v >= 0) return P.IDRM * v / P.VDRM;
+    if (v >= -P.VRRM) return P.IDRM * v / P.VRRM;
+    return -P.IDRM + (v + P.VRRM) / RBR;
+  }
+  function solveOff(vs, r) {
+    var lo = -1e5, hi = 1e5, i, mid;
+    for (i = 0; i < 80; i++) { mid = (lo + hi) / 2; if (mid + r * iOff(mid) > vs) hi = mid; else lo = mid; }
+    return (lo + hi) / 2;
+  }
+
+  function fmtI(I) {
+    var a = Math.abs(I), s = I < 0 ? '−' : '';
+    if (a < 5e-10) return '0 A';
+    var u = [[1e-6, 1e9, 'nA'], [1e-3, 1e6, 'µA'], [1, 1e3, 'mA'], [Infinity, 1, 'A']];
+    for (var i = 0; i < u.length; i++) {
+      if (a < u[i][0]) { var x = a * u[i][1]; return s + (x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2)) + ' ' + u[i][2]; }
+    }
+  }
+  function fmtV(v) { var a = Math.abs(v); return (v < -0.004 ? '−' : (v > 0.004 ? '+' : '')) + (a >= 10 ? a.toFixed(1) : a.toFixed(2)) + ' V'; }
+  function fmtR(r) { return r >= 1000 ? (r / 1000).toFixed(2) + ' kΩ' : r.toFixed(0) + ' Ω'; }
+
+  // ---------- State ----------
+  var VS = 60, RL = 1000, IGm = 0, on = false, V = 0, I = 0, reg = 'off', cantLatch = false, IMAX = 0.12, paused = false;
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var $ = function (id) { return document.getElementById(id); };
+  var dev = $('dev'), iv = $('iv');
+  var dctx = dev.getContext('2d'), ictx = iv.getContext('2d');
+  var col = {};
+
+  function readTheme() {
+    var s = getComputedStyle(document.documentElement);
+    ['bg', 'surface', 'ink', 'muted', 'line', 'p', 'n', 'accent'].forEach(function (k) {
+      col[k] = s.getPropertyValue('--' + k).trim();
+    });
+  }
+  readTheme();
+  setInterval(readTheme, 700);
+
+  function fit(c, ctx) {
+    var r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    var w = Math.max(200, Math.round(r.width)), h = Math.round(r.height);
+    if (c.width !== w * d || c.height !== h * d) { c.width = w * d; c.height = h * d; }
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    return { w: w, h: h };
+  }
+  var FONT = '"IBM Plex Sans", system-ui, sans-serif';
+  var MONO = '"IBM Plex Mono", ui-monospace, monospace';
+
+  // The thyristor has memory: `on` is kept between calls and only changes when a rule below fires.
+  function recompute() {
+    var ig = IGm * 1e-3, ion = (VS - VT0) / (RL + ron());
+    if (VS <= VT0) on = false;
+    if (on && ion < P.IH) on = false;                         // anode current fell below the holding current
+    if (!on && VS > 0 && solveOff(VS, RL) >= vbo(ig) && ion >= P.IH) on = true;   // breakover or gate trigger
+    if (on) { I = ion; V = VT0 + ron() * I; reg = 'on'; }
+    else { V = solveOff(VS, RL); I = iOff(V); reg = V < -P.VRRM ? 'bd' : (VS < -0.5 ? 'rev' : 'off'); }
+    cantLatch = !on && VS > 0 && ig >= P.IGT && ion < P.IH;
+    IMAX = Math.max(1e-4, (parseFloat($('bias').max) - VT0) / (RL + ron()));
+  }
+
+  // ---------- Geometry: four layers along x (0..1) ----------
+  var J = [0.16, 0.62, 0.80], LT = ['p', 'n', 'p', 'n'], LN = ['p+', 'n−', 'p', 'n+'];
+  // Depletion reach on each side of the three junctions: [left, right] per junction.
+  function depl() {
+    var d = [[0.007, 0.007], [0.007, 0.007], [0.007, 0.007]], f;
+    if (on) return d;
+    if (V >= 0) { f = Math.sqrt(Math.min(1.2, V / P.VDRM)); d[1] = [0.007 + 0.30 * f, 0.007 + 0.035 * f]; }
+    else { f = Math.sqrt(Math.min(1.2, -V / P.VRRM)); d[0] = [0.007 + 0.02 * f, 0.007 + 0.30 * f]; d[2] = [0.007 + 0.02 * f, 0.007 + 0.02 * f]; }
+    return d;
+  }
+  function bounds(d) {
+    return [[0.012, J[0] - d[0][0]], [J[0] + d[0][1], J[1] - d[1][0]], [J[1] + d[1][1], J[2] - d[2][0]], [J[2] + d[2][1], 0.988]];
+  }
+
+  // ---------- Carriers ----------
+  var COUNT = [12, 7, 8, 14], stat = [], flow = [], gate = [], gacc = 0;
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  (function init() {
+    var b = bounds(depl());
+    COUNT.forEach(function (n, l) { for (var i = 0; i < n; i++) stat.push({ l: l, x: rnd(b[l][0], b[l][1]), y: rnd(0.06, 0.94), vx: 0, vy: 0 }); });
+  })();
+
+  function step(dt) {
+    var q = Math.sqrt(dt), b = bounds(depl()), i, c;
+    // majority carriers of each layer stay in its neutral part
+    stat.forEach(function (c) {
+      var lo = b[c.l][0], hi = b[c.l][1]; if (hi < lo) { lo = hi = (lo + hi) / 2; }
+      c.vx += (Math.random() - 0.5) * 0.4 * q; c.vy += (Math.random() - 0.5) * 1.6 * q;
+      c.vx *= 1 - 1.5 * dt; c.vy *= 1 - 1.5 * dt; c.x += c.vx * dt; c.y += c.vy * dt;
+      if (c.x < lo) { c.x += Math.min(lo - c.x, 0.5 * dt + 0.002); c.vx = Math.abs(c.vx); }
+      if (c.x > hi) { c.x -= Math.min(c.x - hi, 0.5 * dt + 0.002); c.vx = -Math.abs(c.vx); }
+      if (c.y < 0.05) { c.y = 0.05; c.vy = Math.abs(c.vy); } if (c.y > 0.95) { c.y = 0.95; c.vy = -Math.abs(c.vy); }
+    });
+    // when latched, holes cross from anode to cathode and electrons the other way
+    var k = Math.min(1, Math.abs(I) / IMAX), target = on ? Math.round(10 + 34 * Math.sqrt(k)) : 0, sp = 0.12 + 0.4 * Math.pow(k, 0.6), nh = 0, ne = 0;
+    for (i = flow.length - 1; i >= 0; i--) {
+      c = flow[i];
+      if (c.dead) { c.a -= 3 * dt; if (c.a <= 0) { flow.splice(i, 1); continue; } }
+      else { c.a = Math.min(1, c.a + 3 * dt); if (c.t === 'h') nh++; else ne++; }
+      c.x += (c.t === 'h' ? 1 : -1) * sp * dt; c.y += (Math.random() - 0.5) * 0.9 * q;
+      c.y = Math.max(0.05, Math.min(0.95, c.y));
+      if (c.x > 0.99) { c.x = 0.01; c.a = 0; } if (c.x < 0.01) { c.x = 0.99; c.a = 0; }
+    }
+    ['h', 'e'].forEach(function (t) {
+      var n = t === 'h' ? nh : ne;
+      if (n < target) flow.push({ t: t, x: rnd(0.02, 0.98), y: rnd(0.06, 0.94), a: 0, dead: false });
+      else if (n > target) { for (i = 0; i < flow.length; i++) if (flow[i].t === t && !flow[i].dead) { flow[i].dead = true; break; } }
+    });
+    // gate current: holes enter the p gate layer, and the cathode answers by injecting electrons into it
+    for (i = gate.length - 1; i >= 0; i--) {
+      c = gate[i]; c.life -= dt; c.a = Math.max(0, Math.min(1, c.life / 0.3, c.a + 4 * dt));
+      if (c.t === 'h') { c.y = Math.min(0.92, c.y + 0.45 * dt); c.x += 0.1 * dt; }
+      else c.x -= 0.16 * dt;
+      c.y += (Math.random() - 0.5) * 0.5 * q;
+      if (c.life <= 0) gate.splice(i, 1);
+    }
+    if (IGm > 0.004 && VS > -0.5 && gate.length < 80) {
+      gacc += (3 + 24 * IGm) * dt;
+      while (gacc >= 1) {
+        gacc -= 1;
+        gate.push({ t: 'h', x: rnd(J[1] + 0.03, J[2] - 0.05), y: 0.03, a: 0, life: rnd(1.2, 1.8) });
+        gate.push({ t: 'e', x: J[2] + 0.015, y: rnd(0.1, 0.9), a: 0, life: rnd(1.0, 1.6) });
+      }
+    }
+  }
+
+  // ---------- Drawing helpers ----------
+  function arrow(ctx, x1, y1, x2, y2, head) {
+    var a = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - head * Math.cos(a - 0.45), y2 - head * Math.sin(a - 0.45));
+    ctx.lineTo(x2 - head * Math.cos(a + 0.45), y2 - head * Math.sin(a + 0.45));
+    ctx.closePath(); ctx.fill();
+  }
+  function dot(ctx, px, py, electron) {
+    if (electron) { ctx.fillStyle = col.n; ctx.beginPath(); ctx.arc(px, py, 3.4, 0, 6.2832); ctx.fill(); }
+    else {
+      ctx.fillStyle = col.surface; ctx.strokeStyle = col.p; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(px, py, 3.8, 0, 6.2832); ctx.fill(); ctx.stroke();
+    }
+  }
+
+  // ---------- Drawing: device ----------
+  function drawDevice() {
+    var s = fit(dev, dctx), ctx = dctx, W = s.w;
+    ctx.clearRect(0, 0, W, s.h);
+    var cw = 12, x0 = 14 + cw, x1 = W - 14 - cw, dw = x1 - x0, y0 = 62, dh = 176;
+    var X = function (nx) { return x0 + nx * dw; }, Y = function (ny) { return y0 + ny * dh; };
+    var d = depl(), nb = bounds(d), edges = [0, J[0], J[1], J[2], 1], alpha = [0.30, 0.09, 0.16, 0.30], i;
+
+    // layers
+    ctx.fillStyle = col.surface; ctx.fillRect(x0, y0, dw, dh);
+    for (i = 0; i < 4; i++) {
+      ctx.fillStyle = LT[i] === 'p' ? col.p : col.n; ctx.globalAlpha = alpha[i];
+      ctx.fillRect(X(edges[i]), y0, X(edges[i + 1]) - X(edges[i]), dh);
+    }
+    ctx.globalAlpha = 1;
+    // depletion regions
+    var widest = -1, ww = 0;
+    for (i = 0; i < 3; i++) {
+      var a = X(J[i] - d[i][0]), b = X(J[i] + d[i][1]);
+      ctx.fillStyle = col.surface; ctx.fillRect(a, y0, b - a, dh);
+      ctx.setLineDash([4, 4]); ctx.strokeStyle = col.muted; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(a, y0); ctx.lineTo(a, y0 + dh); ctx.moveTo(b, y0); ctx.lineTo(b, y0 + dh); ctx.stroke(); ctx.setLineDash([]);
+      if (b - a > ww) { ww = b - a; widest = i; }
+    }
+    if (ww > 34) {                                      // field in the junction that is blocking
+      var fa = X(J[widest] - d[widest][0]) + 6, fb = X(J[widest] + d[widest][1]) - 6, fy = y0 + dh - 14;
+      var len = Math.min(90, fb - fa), mid = (fa + fb) / 2, right = LT[widest] === 'n';   // field points from the n side to the p side
+      ctx.strokeStyle = col.accent; ctx.fillStyle = col.accent; ctx.lineWidth = 2.2;
+      if (right) arrow(ctx, mid - len / 2, fy, mid + len / 2, fy, 7); else arrow(ctx, mid + len / 2, fy, mid - len / 2, fy, 7);
+      ctx.font = '600 12px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic'; ctx.fillText('E', mid, fy - 8);
+    }
+    // contacts
+    ctx.fillStyle = col.muted;
+    ctx.fillRect(x0 - cw, y0, cw, dh); ctx.fillRect(x1, y0, cw, dh);
+    ctx.fillRect(X(J[1]) + 8, y0 - cw, X(J[2]) - X(J[1]) - 16, cw);
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2; ctx.strokeRect(x0, y0, dw, dh);
+
+    // carriers
+    stat.forEach(function (c) { dot(ctx, X(c.x), Y(c.y), LT[c.l] === 'n'); });
+    flow.forEach(function (c) { ctx.globalAlpha = Math.max(0, c.a); dot(ctx, X(c.x), Y(c.y), c.t === 'e'); });
+    gate.forEach(function (c) { ctx.globalAlpha = Math.max(0, c.a); dot(ctx, X(c.x), Y(c.y), c.t === 'e'); });
+    ctx.globalAlpha = 1;
+
+    // layer names
+    ctx.textBaseline = 'alphabetic'; ctx.font = '600 13px ' + FONT; ctx.textAlign = 'left';
+    for (i = 0; i < 4; i++) { ctx.fillStyle = LT[i] === 'p' ? col.p : col.n; ctx.fillText(LN[i], X(Math.min(nb[i][0], nb[i][1])) + 6, y0 + 16); }
+    // terminals
+    ctx.fillStyle = col.ink; ctx.font = '600 13px ' + FONT;
+    ctx.textAlign = 'left'; ctx.fillText('anode', x0 - cw, 16);
+    ctx.textAlign = 'center'; ctx.fillText('gate', X((J[1] + J[2]) / 2), 16);
+    ctx.textAlign = 'right'; ctx.fillText('cathode', x1 + cw, 16);
+    ctx.font = '12px ' + MONO; ctx.fillStyle = col.muted;
+    ctx.textAlign = 'left'; ctx.fillText(fmtV(V), x0 - cw, 32);
+    ctx.textAlign = 'center'; ctx.fillText(IGm.toFixed(2) + ' mA', X((J[1] + J[2]) / 2), 32);
+    ctx.textAlign = 'right'; ctx.fillText('0 V', x1 + cw, 32);
+    if (IGm > 0.004) {
+      ctx.strokeStyle = col.ink; ctx.fillStyle = col.ink; ctx.lineWidth = 1.6;
+      var gx = X((J[1] + J[2]) / 2); arrow(ctx, gx, 37, gx, y0 - cw - 2, 5);
+    }
+    // junction states
+    var st = on ? ['forward', 'forward', 'forward'] : (V > 0.3 ? ['forward', 'reverse', 'forward'] : (V < -0.3 ? ['reverse', 'forward', 'reverse'] : ['no bias', 'no bias', 'no bias']));
+    ctx.textAlign = 'center';
+    for (i = 0; i < 3; i++) {
+      ctx.font = '600 12px ' + FONT; ctx.fillStyle = col.ink; ctx.fillText('J' + (i + 1), X(J[i]), y0 + dh + 18);
+      ctx.font = '12px ' + FONT; ctx.fillStyle = st[i] === 'reverse' ? col.accent : col.muted; ctx.fillText(st[i], X(J[i]), y0 + dh + 33);
+    }
+    // anode current and state
+    var cy = y0 + dh + 62;
+    ctx.strokeStyle = col.ink; ctx.fillStyle = col.ink; ctx.lineWidth = 1.6; ctx.font = '12px ' + MONO;
+    if (Math.abs(I) > 1e-4) { if (I > 0) arrow(ctx, x0 - cw, cy, x0 + 26, cy, 5); else arrow(ctx, x0 + 26, cy, x0 - cw, cy, 5); }
+    ctx.textAlign = 'left'; ctx.fillText('IA ' + fmtI(I), x0 + 34, cy + 4);
+    ctx.textAlign = 'right'; ctx.font = '600 13px ' + FONT; ctx.fillStyle = on ? col.p : col.muted;
+    ctx.fillText(on ? 'ON, latched' : 'OFF', x1 + cw, cy + 4);
+    ctx.font = '12px ' + FONT; ctx.fillStyle = col.muted; ctx.textAlign = 'center';
+    ctx.fillText(on ? 'Holes cross from anode to cathode, electrons from cathode to anode.'
+      : (IGm > 0.004 && VS > -0.5 ? 'Gate holes enter the p layer and the cathode injects electrons in reply.' : 'One junction blocks, so only leakage flows.'), (x0 + x1) / 2, cy + 30);
+  }
+
+  // ---------- Drawing: characteristic with the load line ----------
+  function drawIV() {
+    var s = fit(iv, ictx), ctx = ictx, W = s.w, H = s.h, ig = IGm * 1e-3;
+    ctx.clearRect(0, 0, W, H);
+    var L = 58, R = 14, T = 20, B = 36, pw = W - L - R, ph = H - T - B;
+    var vmin = -1.25 * P.VRRM, vmax = 1.25 * P.VDRM, sc = niceScale(IMAX), zy = T + ph * 0.8, ps = (zy - T) / sc.max;
+    var X = function (v) { return L + (v - vmin) / (vmax - vmin) * pw; };
+    var Yi = function (c) { return zy - Math.max(-10 * sc.max, Math.min(10 * sc.max, c)) * ps; };
+    var v, y, i, raw = (vmax - vmin) / 6, st = [1, 2, 5, 10, 20, 25, 50, 100, 200, 250, 500].filter(function (q) { return q >= raw; })[0] || 500;
+
+    ctx.font = '11px ' + MONO; ctx.lineWidth = 1; ctx.textBaseline = 'middle';
+    sc.ticks.forEach(function (tk) {
+      [1, -1].forEach(function (sgn) {
+        y = zy - sgn * tk.v * ps; if (y < T - 1 || y > T + ph + 1) return;
+        ctx.strokeStyle = col.line; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + pw, y); ctx.stroke();
+        ctx.fillStyle = col.muted; ctx.textAlign = 'right'; ctx.fillText((sgn < 0 ? '−' : '') + tk.s, L - 6, y);
+      });
+    });
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
+    for (v = Math.ceil(vmin / st) * st; v <= vmax; v += st) {
+      var x = X(v); ctx.strokeStyle = col.line; ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke();
+      ctx.fillStyle = col.muted; ctx.fillText(v === 0 ? '0' : String(v).replace('-', '−'), x, T + ph + 15);
+    }
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(L, zy); ctx.lineTo(L + pw, zy); ctx.moveTo(X(0), T); ctx.lineTo(X(0), T + ph); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.font = '12px ' + FONT;
+    ctx.textAlign = 'right'; ctx.fillText('anode-cathode voltage (V)', L + pw, T + ph + 31);
+    ctx.fillText('anode current', X(0) - 6, T + 2);
+
+    ctx.save(); ctx.beginPath(); ctx.rect(L, T, pw, ph); ctx.clip();
+    // load line
+    ctx.setLineDash([6, 4]); ctx.strokeStyle = col.muted; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(X(vmin), Yi((VS - vmin) / RL)); ctx.lineTo(X(vmax), Yi((VS - vmax) / RL)); ctx.stroke(); ctx.setLineDash([]);
+    // blocking branch up to the gate-free breakover voltage (faint), then up to the present breakover voltage (bold)
+    function offCurve(to) {
+      ctx.beginPath();
+      for (i = 0; i <= 300; i++) { v = vmin + (to - vmin) * i / 300; y = Yi(iOff(v)); if (i === 0) ctx.moveTo(X(v), y); else ctx.lineTo(X(v), y); }
+      ctx.stroke();
+    }
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = col.muted; ctx.globalAlpha = 0.55; ctx.lineWidth = 1.2; offCurve(P.VDRM); ctx.globalAlpha = 1;
+    var bo = vbo(ig), vh = VT0 + ron() * P.IH;
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 2.2; offCurve(bo);
+    // conducting branch from the holding current upwards
+    ctx.beginPath(); ctx.moveTo(X(vh), Yi(P.IH)); ctx.lineTo(X(VT0 + ron() * sc.max * 1.2), Yi(sc.max * 1.2)); ctx.stroke();
+    // switching path from breakover to the conducting branch
+    ctx.setLineDash([5, 4]); ctx.strokeStyle = col.accent; ctx.lineWidth = 1.4;
+    ctx.beginPath(); ctx.moveTo(X(bo), Yi(iOff(bo))); ctx.lineTo(X(vh), Yi(P.IH)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.restore();
+    // markers
+    ctx.fillStyle = col.accent; ctx.font = '12px ' + FONT; ctx.textAlign = 'center';
+    ctx.beginPath(); ctx.arc(X(bo), Yi(iOff(bo)), 3, 0, 6.2832); ctx.fill();
+    ctx.fillText('breakover ' + bo.toFixed(bo < 10 ? 1 : 0) + ' V', Math.min(L + pw - 50, Math.max(X(0) + 54, X(bo))), zy + 28);
+    ctx.fillStyle = col.muted; ctx.textAlign = 'right';
+    ctx.fillText('holding current', X(vh) - 10, Yi(P.IH) - 6);
+    ctx.beginPath(); ctx.arc(X(vh), Yi(P.IH), 3, 0, 6.2832); ctx.fill();
+    ctx.textAlign = 'right'; ctx.fillText('dashed grey: load line', L + pw - 4, T + 12);
+
+    // operating point
+    var px = X(V), py = Yi(I);
+    ctx.fillStyle = col.accent; ctx.beginPath(); ctx.arc(px, py, 6, 0, 6.2832); ctx.fill();
+    ctx.strokeStyle = col.surface; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = '500 13px ' + MONO; ctx.fillStyle = col.ink; ctx.textAlign = V > (vmin + vmax) / 2 + (vmax - vmin) / 4 ? 'right' : 'left';
+    ctx.fillText(fmtI(I), px + (ctx.textAlign === 'right' ? -10 : 10), Math.max(T + 26, py - 10));
+  }
+
+  // ---------- Text and readouts ----------
+  function updateText() {
+    decor();
+    var ig = IGm * 1e-3, bo = vbo(ig), pw = Math.abs(V * I);
+    $('biasOut').textContent = (VS > 0 ? '+' : VS < 0 ? '−' : '') + Math.abs(VS).toFixed(0) + ' V';
+    $('rlOut').textContent = fmtR(RL); $('igOut').textContent = IGm.toFixed(2) + ' mA';
+    $('rV').textContent = fmtV(V); $('rI').textContent = fmtI(I);
+    $('rBO').textContent = bo.toFixed(bo < 10 ? 1 : 0) + ' V';
+    $('rP').textContent = pw < 1e-6 ? '0 mW' : (pw >= 1 ? pw.toFixed(2) + ' W' : (pw * 1e3).toFixed(pw * 1e3 >= 10 ? 0 : 2) + ' mW');
+    var pill = $('exPill'), title, text;
+    if (reg === 'on') {
+      pill.textContent = 'Conducting'; pill.className = 'pill on'; title = 'Latched on';
+      text = 'Electrons injected by the n+ cathode cross the p gate layer into the n− layer, where they act as base current for the pnp half of the device. That half sends holes back into the p layer, which is base current for the npn half. Each half drives the other harder until both saturate. All three junctions are now forward biased and the middle layers are flooded with carriers, so the voltage across the thyristor has collapsed to ' + fmtV(V) + ' and the current of ' + fmtI(I) + ' is set by the load resistor. ' +
+        (IGm < 0.005 ? 'The gate current is zero and it stays on all the same' : 'The gate current is no longer needed') + ': it will only switch off when the anode current falls below the holding current of ' + fmtI(P.IH) + '.';
+    } else if (reg === 'bd') {
+      pill.textContent = 'Reverse breakdown'; pill.className = 'pill bd'; title = 'Reverse breakdown';
+      text = 'The reverse voltage has passed ' + P.VRRM.toFixed(0) + ' V and junction J1 has broken down. The current of ' + fmtI(I) + ' is limited only by the load resistor. A real thyristor is normally destroyed by this, so circuits are designed to stay well inside the reverse rating.';
+    } else if (reg === 'rev') {
+      pill.textContent = 'Reverse blocking'; pill.className = 'pill rev'; title = 'Blocking in reverse';
+      text = 'The anode is negative. Junctions J1 and J3 are reverse biased and J2 is forward biased. J1 has the lightly doped n− layer beside it, so its depletion region takes nearly all of the voltage. Only a leakage current of ' + fmtI(I) + ' flows. Gate current cannot turn the device on in this direction.';
+    } else if (cantLatch) {
+      pill.textContent = 'Forward blocking'; pill.className = 'pill off'; title = 'Triggered, but it cannot latch';
+      text = 'The gate current is above the trigger level, but this supply and load could only pass ' + fmtI(Math.max(0, (VS - VT0) / (RL + ron()))) + ', which is less than the holding current of ' + fmtI(P.IH) + '. The two halves of the device cannot keep each other saturated at so small a current, so the thyristor does not stay on. Raise the supply voltage or lower the load resistance.';
+    } else if (VS < 0.5) {
+      pill.textContent = 'Off'; pill.className = 'pill off'; title = 'No supply voltage';
+      text = 'With no voltage across it the thyristor is off and no current flows. If it was conducting, taking the supply away has let the anode current fall below the holding current, and it has reset: it will block again when the voltage returns until it is triggered once more.';
+    } else {
+      pill.textContent = 'Forward blocking'; pill.className = 'pill off'; title = 'Blocking, waiting for a trigger';
+      text = 'The anode is positive, so J1 and J3 are forward biased, but the middle junction J2 is reverse biased and its depletion region takes almost all of the ' + fmtV(V) + '. Only a leakage current of ' + fmtI(I) + ' flows. ' +
+        (IGm > 0.004 ? 'The gate current of ' + IGm.toFixed(2) + ' mA makes the cathode inject some electrons and lowers the breakover voltage to ' + bo.toFixed(0) + ' V, which is still above the voltage applied. A little more gate current will fire it.'
+          : 'The thyristor stays off until it is triggered, either by gate current of about ' + fmtI(P.IGT) + ' or by raising the voltage to the breakover value of ' + bo.toFixed(0) + ' V.');
+    }
+    $('exTitle').textContent = title; $('exText').textContent = text;
+  }
+
+  // ---------- SPICE model parameters, editable by the user ----------
+  var HINT = 'Press Enter after editing a value. Scientific notation such as 1e-14 is accepted.';
+  function fmtP(v) {
+    if (v === 0) return '0';
+    var a = Math.abs(v);
+    if (a < 1e-3 || a >= 1e5) return v.toExponential().replace('e+', 'e');
+    return String(parseFloat(v.toPrecision(6)));
+  }
+  // Axis maximum and tick labels for a current axis that must reach m amps.
+  function niceScale(m) {
+    m = Math.max(m, 1e-12);
+    var u = m < 1e-9 ? [1e12, 'pA'] : m < 1e-6 ? [1e9, 'nA'] : m < 1e-3 ? [1e6, 'µA'] : m < 1 ? [1e3, 'mA'] : [1, 'A'];
+    var v = m * u[0], mag = Math.pow(10, Math.floor(Math.log10(v))), n = v / mag;
+    var opt = [[1, 0.2], [2, 0.5], [2.5, 0.5], [4, 1], [5, 1], [6, 2], [8, 2], [10, 2]], i, o = opt[opt.length - 1];
+    for (i = 0; i < opt.length; i++) if (n <= opt[i][0] * 1.0001) { o = opt[i]; break; }
+    var top = o[0] * mag, st = o[1] * mag, ticks = [];
+    for (i = 1; i * st <= top * 1.0001; i++) ticks.push({ v: i * st / u[0], s: parseFloat((i * st).toPrecision(3)) + ' ' + u[1] });
+    return { max: top / u[0], ticks: ticks };
+  }
+  function symbolSvg(title, lines, arrowPath, labels) {
+    var s = '<svg viewBox="0 0 120 96" width="120" height="96" role="img" aria-label="' + title + '"><g transform="translate(18,6)">' +
+      '<path class="sym" d="' + lines + '"/><path class="symf" d="' + arrowPath + '"/></g>';
+    labels.forEach(function (l) { s += '<text x="' + l[1] + '" y="' + l[2] + '" text-anchor="' + (l[3] || 'start') + '">' + l[0] + '</text>'; });
+    return s + '</svg>';
+  }
+  var decorKey = '';
+  function decor() {
+    var d = describe(), key = d.model + d.symbol;
+    if (key === decorKey) return;
+    decorKey = key; $('mline').textContent = d.model; $('sym').innerHTML = d.symbol; $('mdl').innerHTML = d.circuit;
+  }
+  function buildParams() {
+    var grid = $('pgrid');
+    SPEC.forEach(function (p) {
+      var l = document.createElement('label'); l.className = 'pf';
+      var b = document.createElement('b'); b.textContent = p.k;
+      var sp = document.createElement('span'); sp.textContent = p.d;
+      var inp = document.createElement('input'); inp.type = 'text'; inp.inputMode = 'decimal'; inp.id = 'p_' + p.k;
+      inp.autocomplete = 'off'; inp.value = fmtP(P[p.k]);
+      inp.addEventListener('change', function () {
+        var v = parseFloat(inp.value.replace(',', '.'));
+        if (!isFinite(v) || v < p.min || v > p.max) {
+          inp.classList.add('bad');
+          $('perr').textContent = p.k + ' must be a number from ' + fmtP(p.min) + ' to ' + fmtP(p.max) + '.';
+          return;
+        }
+        inp.classList.remove('bad'); $('perr').textContent = HINT;
+        P[p.k] = v; inp.value = fmtP(v); applyParams();
+      });
+      l.appendChild(b); l.appendChild(sp); l.appendChild(inp); grid.appendChild(l);
+    });
+    $('perr').textContent = HINT;
+    $('pReset').addEventListener('click', function () {
+      SPEC.forEach(function (p) { P[p.k] = p.def; var e = $('p_' + p.k); e.value = fmtP(p.def); e.classList.remove('bad'); });
+      $('perr').textContent = HINT; applyParams();
+    });
+  }
+  function liveEq() {
+    return '<i>V</i><sub>S</sub> = ' + fmtV(VS) + ', <i>R</i> = ' + fmtR(RL) + ', <i>I</i><sub>G</sub> = ' + IGm.toFixed(2) + ' mA gives <i>V</i><sub>AK</sub> = ' + fmtV(V) + ', <i>I</i><sub>A</sub> = ' + fmtI(I) + ' (' + (on ? 'on' : 'off') + ')';
+  }
+  // ---------- Equations, equivalent circuit and region pill ----------
+  function circuitSvg(kind, flip, t, src, cap) {
+    function tx(x, y, str, anchor) { return '<text x="' + x + '" y="' + y + '" text-anchor="' + (anchor || 'start') + '">' + str + '</text>'; }
+    function sub(m, sb) { return m + '<tspan dy="4" font-size="10">' + sb + '</tspan>'; }
+    var s = '<svg viewBox="0 0 230 200" width="230" height="200" role="img" aria-label="' + cap + '">';
+    if (kind === 'diode') {
+      s += '<path class="sym" d="M20 100H92M124 100H206M124 82V118M34 80H62"/><path class="symf" d="M92 82V118L124 100Z"/><path class="symf" d="M66 80L57 75.5V84.5Z"/>';
+      s += tx(49, 68, sub('I', 'D'), 'middle') + tx(20, 124, 'A') + tx(206, 124, 'K', 'end') + tx(66, 152, '+') + tx(108, 152, sub('V', 'D'), 'middle') + tx(146, 152, '−');
+    } else {
+      s += '<path class="sym" d="M170 12V78M170 122V188"/><circle class="sym" cx="170" cy="100" r="22"/>';
+      s += flip ? '<path class="sym" d="M170 114V94"/><path class="symf" d="M170 85L165 95H175Z"/>'
+                : '<path class="sym" d="M170 86V106"/><path class="symf" d="M170 115L165 105H175Z"/>';
+      s += tx(200, 104, src) + tx(180, 22, t[1]) + tx(180, 186, t[2]) + tx(24, 92, t[0]);
+      if (kind === 'three') {
+        s += '<path class="sym" d="M24 100H80M80 100V40H170M80 100V160H170"/>';
+        s += flip ? '<path class="symf" d="M70 62H90L80 78Z"/><path class="sym" d="M70 78H90"/><path class="symf" d="M70 138H90L80 122Z"/><path class="sym" d="M70 122H90"/>'
+                  : '<path class="symf" d="M70 78H90L80 62Z"/><path class="sym" d="M70 62H90"/><path class="symf" d="M70 122H90L80 138Z"/><path class="sym" d="M70 138H90"/>';
+        s += '<circle class="symf" cx="80" cy="100" r="3"/><circle class="symf" cx="170" cy="40" r="3"/><circle class="symf" cx="170" cy="160" r="3"/>';
+        s += tx(62, 74, sub('D', t[0] + t[1]), 'end') + tx(62, 134, sub('D', t[0] + t[2]), 'end');
+      } else {
+        s += '<path class="sym" d="M24 100H94"/><circle class="sym" cx="99" cy="100" r="5"/>';
+        s += tx(99, 128, sub('I', 'G') + '<tspan dy="-4"> = 0</tspan>', 'middle');
+      }
+    }
+    return s + '</svg><figcaption>' + cap + '</figcaption>';
+  }
+  function syncReg() {
+    var p = $('exPill'), q = $('ivPill'), key = p.className.split(' ')[1];
+    q.textContent = p.textContent; q.className = p.className;
+    Array.prototype.forEach.call(document.querySelectorAll('.eqrow[data-reg]'), function (r) {
+      r.classList.toggle('on', r.getAttribute('data-reg').split(' ').indexOf(key) >= 0);
+    });
+    $('eqLive').innerHTML = 'With the present settings: <span class="eq">' + liveEq() + '</span>';
+  }
+  var baseUpdateText = updateText;
+  updateText = function () { baseUpdateText(); syncReg(); };
+  function describe() {
+    function tx(x, y, str, anchor) { return '<text x="' + x + '" y="' + y + '" text-anchor="' + (anchor || 'start') + '">' + str + '</text>'; }
+    var cap = 'Two-transistor model: the collector of each transistor feeds the base of the other, so once both conduct they hold each other on.';
+    var circuit = '<svg viewBox="0 0 230 214" width="230" height="214" role="img" aria-label="' + cap + '">' +
+      '<path class="sym" d="M64 12V44L90 60M90 50V90M90 80L64 96V150M90 70H150V124L124 140M124 130V170M124 150H24M124 160L150 176V202"/>' +
+      '<path class="symf" d="M86 57.5L75.1 56.1L79.9 48.5Z"/><path class="symf" d="M146 173.5L135.1 172.1L139.9 164.5Z"/>' +
+      '<circle class="symf" cx="64" cy="150" r="3"/><circle class="symf" cx="150" cy="70" r="3"/>' +
+      tx(74, 22, 'A') + tx(160, 200, 'K') + tx(24, 142, 'G') + tx(100, 44, 'pnp') + tx(160, 150, 'npn') +
+      '</svg><figcaption>' + cap + '</figcaption>';
+    return {
+      model: 'X1 A G K Scr PARAMS: Vdrm=' + fmtP(P.VDRM) + ' Vrrm=' + fmtP(P.VRRM) + ' Igt=' + fmtP(P.IGT) + ' Ih=' + fmtP(P.IH) + ' Vtm=' + fmtP(P.VTM) + ' Itm=' + fmtP(P.ITM) + ' Idrm=' + fmtP(P.IDRM),
+      circuit: circuit,
+      symbol: symbolSvg('Thyristor symbol with anode A, cathode K and gate G', 'M6 42H30M54 42H78M54 26V58M54 50L68 64V78', 'M30 26V58L54 42Z', [['A', 24, 40], ['K', 96, 40, 'end'], ['G', 92, 84]])
+    };
+  }
+  function applyParams() {
+    var e = $('bias');
+    e.min = (-Math.round(1.2 * P.VRRM)).toFixed(0); e.max = Math.round(1.2 * P.VDRM).toFixed(0);
+    VS = Math.max(parseFloat(e.min), Math.min(parseFloat(e.max), VS)); e.value = VS;
+    refresh();
+  }
+
+  // ---------- Controls ----------
+  function refresh() { recompute(); updateText(); if (paused) render(); }
+  $('bias').addEventListener('input', function (ev) { VS = parseFloat(ev.target.value); refresh(); });
+  $('rl').addEventListener('input', function (ev) { RL = parseFloat(ev.target.value); refresh(); });
+  $('ig').addEventListener('input', function (ev) { IGm = parseFloat(ev.target.value); refresh(); });
+  $('presets').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    var k = b.dataset.k, half = Math.round(0.6 * P.VDRM);
+    if (k === 'block') { on = false; VS = half; IGm = 0; RL = 1000; }
+    else if (k === 'fire') { if (VS < half) VS = half; IGm = Math.min(0.5, Math.round(P.IGT * 1.5e3 * 100) / 100); }
+    else if (k === 'hold') { IGm = 0; }
+    else if (k === 'off') { IGm = 0; VS = 0; }
+    else { IGm = 0; VS = -Math.round(0.6 * P.VRRM); }
+    $('bias').value = VS; $('rl').value = RL; $('ig').value = IGm; refresh();
+  });
+  var last = 0;
+  function setPaused(p) {
+    paused = p; var b = $('pause');
+    b.textContent = p ? 'Play' : 'Pause'; b.setAttribute('aria-pressed', p ? 'true' : 'false');
+    last = 0;
+  }
+  $('pause').addEventListener('click', function () { setPaused(!paused); });
+
+  // ---------- Loop ----------
+  function render() { drawDevice(); drawIV(); }
+  function frame(t) {
+    if (!paused) {
+      var dt = last ? Math.min(0.05, (t - last) / 1000) : 0.016; last = t;
+      step(dt);
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+  buildParams(); applyParams();
+  if (reduced) { for (var i = 0; i < 120; i++) step(0.016); setPaused(true); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

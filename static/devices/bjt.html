@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BJT Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a lab bench. Device cross-section and output characteristics side by side,
+   one control strip under them, readouts and explanation below. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --ink: #17212b;
+  --muted: #5d6b79;
+  --line: #d5dce3;
+  --p: #c2416b;        /* p-type, holes */
+  --n: #2466b0;        /* n-type, electrons */
+  --accent: #b06a00;   /* field, operating point, recombination */
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+    --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+  --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+}
+main { max-width: 1160px; margin: 0 auto; padding: 24px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+header h1 { font-family: var(--font-display); font-size: 30px; line-height: 1.15; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 65ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px; min-width: 0; }
+.panel h2 { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+canvas { display: block; width: 100%; height: 380px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.h { border: 2px solid var(--p); }
+.dot.e { background: var(--n); }
+.dot.r { border: 1.5px solid var(--accent); width: 13px; height: 13px; }
+.sw { width: 14px; height: 10px; border: 1px dashed var(--muted); display: inline-block; }
+
+.controls { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.row > label, .row > .lbl { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-width: 150px; }
+input[type="range"] { flex: 1 1 240px; min-width: 0; accent-color: var(--accent); height: 28px; }
+output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 18px; min-width: 86px; text-align: right; }
+button {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.group { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.readouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.tile .k { font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.tile .v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 22px; margin-top: 2px; }
+
+.explain h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.off { color: var(--muted); } .pill.act { color: var(--n); } .pill.sat { color: var(--p); }
+.explain p { margin: 0 0 8px; max-width: 70ch; }
+.explain p:last-child { margin-bottom: 0; }
+.note { font-size: 13px; color: var(--muted); max-width: 90ch; margin: 0; }
+
+.h2row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.eqs { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; }
+.eqlist { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.eqrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 8px 10px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 4px; }
+.eqrow.on { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.eqrow .lbl2 { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.eq { font-family: "Cambria Math", "STIX Two Math", "Times New Roman", serif; font-size: 18px; line-height: 1.7; }
+.eq i { font-style: italic; }
+.eq .sp { font-family: var(--font-mono); font-size: 0.82em; }
+.eqnote { font-size: 13px; color: var(--muted); flex-basis: 100%; }
+.eqlive { margin: 10px 0 0; padding: 8px 10px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); font-size: 14px; overflow-x: auto; }
+.eqlive .eq { font-size: 17px; }
+.mdl { margin: 0; width: 230px; }
+.mdl svg { display: block; }
+.mdl .sym { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mdl .symf { fill: var(--ink); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.mdl text { font: 500 13px var(--font-mono); fill: var(--ink); }
+.mdl figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
+@media (max-width: 720px) { .eqs { grid-template-columns: minmax(0, 1fr); } }
+.head { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.symbol { flex: none; }
+.symbol svg { display: block; }
+.symbol .sym { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.symbol .symf { fill: var(--ink); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.symbol text { font: 500 13px var(--font-mono); fill: var(--muted); }
+.params { display: flex; flex-direction: column; gap: 10px; }
+.pgrid { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.pf { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.pf b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); font-size: 14px; }
+.pf input { font-family: var(--font-mono); font-size: 15px; width: 132px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+.pf input.bad { border-color: var(--p); outline: 1px solid var(--p); }
+.modelline { font-family: var(--font-mono); font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; margin: 0; }
+@media (max-width: 860px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  #iv { height: 300px; }
+  .readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .row > label, .row > .lbl { min-width: 100%; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header class="head">
+    <div>
+    <p style="margin:0 0 6px"><a href="index.html" style="color:inherit">← All devices</a></p>
+    <h1>BJT Explorer</h1>
+    <p>Set the base current and the collector voltage of an npn or pnp transistor and watch how a small base current steers a large collector current.</p>
+    </div>
+    <div class="symbol" id="sym"></div>
+  </header>
+
+  <section class="bench">
+    <div class="panel">
+      <h2>Inside the transistor</h2>
+      <canvas id="dev" role="img" aria-label="Cross-section of a bipolar transistor with emitter, base and collector, moving carriers, and the carrier concentration across the base"></canvas>
+      <div class="legend">
+        <span><i class="dot h"></i>hole</span>
+        <span><i class="dot e"></i>electron</span>
+        <span><i class="sw"></i>depletion region</span>
+        <span><i class="dot r"></i>recombination</span>
+      </div>
+      <p class="note" style="margin-top:6px">Lower plot: <span id="lgCarrier">electron</span> concentration across the base. A steep slope means a large collector current; a level top means saturation.</p>
+    </div>
+    <div class="panel">
+      <h2 class="h2row">Output characteristics <span class="pill" id="ivPill"></span></h2>
+      <canvas id="iv" role="img" aria-label="Collector current against collector-emitter voltage for several base currents, with the present operating point marked"></canvas>
+    </div>
+  </section>
+
+  <section class="panel controls">
+    <div class="row">
+      <span class="lbl">Transistor type</span>
+      <div class="group" id="type">
+        <button type="button" data-t="npn" aria-pressed="true">npn</button>
+        <button type="button" data-t="pnp" aria-pressed="false">pnp</button>
+      </div>
+      <button type="button" id="pause" aria-pressed="false">Pause</button>
+    </div>
+    <div class="row">
+      <label for="ib">Base current</label>
+      <input type="range" id="ib" min="0" max="60" step="1" value="30">
+      <output id="ibOut" for="ib">30 µA</output>
+    </div>
+    <div class="row">
+      <label for="vce" id="vceLbl">Collector-emitter voltage</label>
+      <input type="range" id="vce" min="0" max="10" step="0.02" value="5">
+      <output id="vceOut" for="vce">5.00 V</output>
+    </div>
+    <div class="row">
+      <span class="lbl">Jump to</span>
+      <div class="group" id="presets">
+        <button type="button" data-ib="0" data-v="5">Cutoff</button>
+        <button type="button" data-ib="30" data-v="5">Active</button>
+        <button type="button" data-ib="30" data-v="0.08">Saturation</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="panel params">
+    <h2>Model parameters (SPICE names)</h2>
+    <div class="pgrid" id="pgrid"></div>
+    <pre class="modelline" id="mline"></pre>
+    <div class="row">
+      <button type="button" id="pReset">Reset to defaults</button>
+      <p class="note" id="perr" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="readouts">
+    <div class="tile"><div class="k">Collector current</div><div class="v" id="rIC">0 A</div></div>
+    <div class="tile"><div class="k">Emitter current</div><div class="v" id="rIE">0 A</div></div>
+    <div class="tile"><div class="k" id="kVBE">Base-emitter voltage</div><div class="v" id="rVBE">0.00 V</div></div>
+    <div class="tile"><div class="k">Collector ÷ base current</div><div class="v" id="rG">0</div></div>
+  </section>
+
+  <section class="panel explain" aria-live="polite">
+    <h3><span id="exTitle">What is happening</span><span class="pill act" id="exPill">Active</span></h3>
+    <p id="exText"></p>
+    <p id="exDir"></p>
+  </section>
+
+  <section class="panel">
+    <h2>Equations and model</h2>
+    <div class="eqs">
+      <ul class="eqlist">
+        <li class="eqrow"><span class="lbl2">Transport current</span><span class="eq"><i>I</i><sub>CT</sub> = <span class="sp">IS</span> · (e<sup><i>V</i><sub>BE</sub> / <i>V</i><sub>T</sub></sup> − e<sup><i>V</i><sub>BC</sub> / <i>V</i><sub>T</sub></sup>) · (1 + <i>V</i><sub>CE</sub> / <span class="sp">VAF</span>)</span><span class="eqnote">The current carried from emitter to collector by carriers crossing the base, with the Early effect.</span></li>
+        <li class="eqrow"><span class="lbl2">Collector</span><span class="eq"><i>I</i><sub>C</sub> = <i>I</i><sub>CT</sub> − (<span class="sp">IS</span> / <span class="sp">BR</span>) · (e<sup><i>V</i><sub>BC</sub> / <i>V</i><sub>T</sub></sup> − 1)</span></li>
+        <li class="eqrow"><span class="lbl2">Base</span><span class="eq"><i>I</i><sub>B</sub> = (<span class="sp">IS</span> / <span class="sp">BF</span>) · (e<sup><i>V</i><sub>BE</sub> / <i>V</i><sub>T</sub></sup> − 1) + (<span class="sp">IS</span> / <span class="sp">BR</span>) · (e<sup><i>V</i><sub>BC</sub> / <i>V</i><sub>T</sub></sup> − 1)</span></li>
+        <li class="eqrow"><span class="lbl2">Emitter</span><span class="eq"><i>I</i><sub>E</sub> = <i>I</i><sub>C</sub> + <i>I</i><sub>B</sub></span><span class="eqnote"><i>V</i><sub>BC</sub> = <i>V</i><sub>BE</sub> − <i>V</i><sub>CE</sub>, and <i>V</i><sub>T</sub> = kT/q = 25.85 mV at 27 °C. For a pnp transistor read every voltage and current with the opposite sign.</span></li>
+        <li class="eqrow" data-reg="off"><span class="pill off">Cutoff</span><span class="eq"><i>I</i><sub>C</sub> ≈ 0</span><span class="eqnote">Neither junction is forward biased, so both exponentials are negligible.</span></li>
+        <li class="eqrow" data-reg="act"><span class="pill act">Active</span><span class="eq"><i>I</i><sub>C</sub> ≈ <span class="sp">BF</span> · <i>I</i><sub>B</sub> · (1 + <i>V</i><sub>CE</sub> / <span class="sp">VAF</span>)</span><span class="eqnote"><i>V</i><sub>BC</sub> is negative, so the terms in e<sup><i>V</i><sub>BC</sub> / <i>V</i><sub>T</sub></sup> drop out.</span></li>
+        <li class="eqrow" data-reg="sat"><span class="pill sat">Saturation</span><span class="eq"><i>I</i><sub>C</sub> &lt; <span class="sp">BF</span> · <i>I</i><sub>B</sub></span><span class="eqnote"><i>V</i><sub>BC</sub> is positive: the collector junction conducts too, and its terms subtract from the collector current and add to the base current.</span></li>
+      </ul>
+      <figure class="mdl" id="mdl"></figure>
+    </div>
+    <p class="eqlive" id="eqLive"></p>
+  </section>
+
+  <p class="note">Model: Ebers-Moll transport equations at 300 K with the parameters above. No breakdown and no high-current effects. The pnp version uses the same magnitudes with every voltage and current reversed. About one injected carrier in eight is shown recombining in the base so that the base current is visible; with a gain of 100 the real figure is about one in a hundred. The readouts and curves use the real equations.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- Device model (magnitudes; pnp reverses every sign) ----------
+  var P = { IS: 1e-14, BF: 100, BR: 2, VAF: 100 };
+  var SPEC = [
+    { k: 'IS', d: 'transport saturation current (A)', def: 1e-14, min: 1e-18, max: 1e-9 },
+    { k: 'BF', d: 'forward current gain', def: 100, min: 10, max: 1000 },
+    { k: 'BR', d: 'reverse current gain', def: 2, min: 0.1, max: 50 },
+    { k: 'VAF', d: 'forward Early voltage (V)', def: 100, min: 10, max: 1000 }
+  ];
+  var M = { Is: 1e-14, bF: 100, bR: 2, Vt: 0.025852, VA: 100 };
+  function solve(IB, vce) {
+    var a = M.Is / M.bF, b = M.Is / M.bR, ex = Math.exp(-vce / M.Vt);
+    var u = (IB + a + b) / (a + b * ex);
+    var ic = M.Is * u * (1 - ex) * (1 + vce / M.VA) - b * (u * ex - 1);
+    return { ic: ic, ie: ic + IB, vbe: M.Vt * Math.log(u), u: u, ex: ex };
+  }
+  var UMAX = 60e-6 * M.bF / M.Is;
+
+  function fmtI(I) {
+    var a = Math.abs(I), s = I < 0 ? '−' : '';
+    if (a < 5e-17) return '0 A';
+    var u = [[1e-12, 1e15, 'fA'], [1e-9, 1e12, 'pA'], [1e-6, 1e9, 'nA'], [1e-3, 1e6, 'µA'], [1, 1e3, 'mA'], [Infinity, 1, 'A']];
+    for (var i = 0; i < u.length; i++) {
+      if (a < u[i][0]) {
+        var x = a * u[i][1];
+        return s + (x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2)) + ' ' + u[i][2];
+      }
+    }
+  }
+
+  // ---------- State ----------
+  var pol = 'npn', IBu = 30, VCE = 5, paused = false, op = solve(30e-6, 5), reg = 'act', pc = 1;
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var $ = function (id) { return document.getElementById(id); };
+  var dev = $('dev'), iv = $('iv');
+  var dctx = dev.getContext('2d'), ictx = iv.getContext('2d');
+  var col = {};
+
+  function readTheme() {
+    var s = getComputedStyle(document.documentElement);
+    ['bg', 'surface', 'ink', 'muted', 'line', 'p', 'n', 'accent'].forEach(function (k) {
+      col[k] = s.getPropertyValue('--' + k).trim();
+    });
+  }
+  readTheme();
+  setInterval(readTheme, 700);
+
+  function fit(c, ctx) {
+    var r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    var w = Math.max(200, Math.round(r.width)), h = Math.round(r.height);
+    if (c.width !== w * d || c.height !== h * d) { c.width = w * d; c.height = h * d; }
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    return { w: w, h: h };
+  }
+  var FONT = '"IBM Plex Sans", system-ui, sans-serif';
+  var MONO = '"IBM Plex Mono", ui-monospace, monospace';
+
+  function recompute() {
+    op = solve(IBu * 1e-6, VCE);
+    var ideal = M.bF * IBu * 1e-6 * (1 + VCE / M.VA);
+    pc = IBu < 0.5 ? 1 : Math.max(0, Math.min(1, op.ic / ideal));
+    reg = IBu < 0.5 ? 'off' : (pc < 0.9 ? 'sat' : 'act');
+  }
+
+  // ---------- Geometry (normalised 0..1 along the device) ----------
+  var XEB = 0.38, XCB = 0.5;
+  function geo() {
+    var wEB = 0.035 * Math.sqrt(Math.max(0.05, 0.8 - op.vbe) / 0.8);
+    var wCB = 0.03 * Math.sqrt(Math.max(0.03, 0.7 - (op.vbe - VCE)) / 0.7);
+    return { eR: XEB - 0.3 * wEB, bL: XEB + 0.7 * wEB, bR: XCB - 0.2 * wCB, cL: XCB + 0.8 * wCB };
+  }
+
+  // ---------- Carriers ----------
+  // k: 'maj' = emitter/collector majority type (electrons in npn), 'bas' = base majority type.
+  var NE = 36, NB = 9, NC = 22, cs = [], flashes = [];
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function mk(k, x, s) {
+    return { k: k, x: x, y: rnd(0.06, 0.94), vx: rnd(-0.08, 0.08), vy: rnd(-0.25, 0.25), s: s, a: 0, life: 0, doom: false, stored: false };
+  }
+  (function init() {
+    var g = geo(), i, c;
+    for (i = 0; i < NE; i++) { c = mk('maj', rnd(0.02, g.eR - 0.01), 'E'); c.a = 1; cs.push(c); }
+    for (i = 0; i < NB; i++) { c = mk('bas', rnd(g.bL + 0.005, g.bR - 0.005), 'free'); c.a = 1; cs.push(c); }
+    for (i = 0; i < NC; i++) { c = mk('maj', rnd(g.cL + 0.01, 0.98), 'C'); c.a = 1; cs.push(c); }
+  })();
+
+  function wander(c, dt, lo, hi, ax) {
+    var q = Math.sqrt(dt);
+    c.vx += (Math.random() - 0.5) * ax * q;
+    c.vy += (Math.random() - 0.5) * 1.6 * q;
+    c.vx *= 1 - 1.5 * dt; c.vy *= 1 - 1.5 * dt;
+    c.x += c.vx * dt; c.y += c.vy * dt;
+    if (c.y < 0.05) { c.y = 0.05; c.vy = Math.abs(c.vy); }
+    if (c.y > 0.95) { c.y = 0.95; c.vy = -Math.abs(c.vy); }
+    var hit = 0;
+    if (c.x < lo) { c.x = lo; c.vx = Math.abs(c.vx); hit = -1; }
+    if (c.x > hi) { c.x = hi; c.vx = -Math.abs(c.vx); hit = 1; }
+    return hit;
+  }
+  function nearest(k, s, x, y) {
+    var best = null, bd = 1e9;
+    cs.forEach(function (c) {
+      if (c.k !== k || c.s !== s) return;
+      var d = Math.abs(c.x - x) + 0.2 * Math.abs(c.y - y);
+      if (d < bd) { bd = d; best = c; }
+    });
+    return best;
+  }
+
+  var acc = { inj: 0, back: 0.5 }, tmr = { e: 0, b: 0 };
+  function step(dt) {
+    var g = geo(), i, c, hit, o;
+    for (i = cs.length - 1; i >= 0; i--) {
+      c = cs[i];
+      if (c.s !== 'leave' && c.s !== 'gone' && c.s !== 'inE') c.a = Math.min(1, c.a + dt * 3);
+      switch (c.s) {
+        case 'E': wander(c, dt, 0.014, g.eR - 0.006, 0.5); break;
+        case 'C': wander(c, dt, g.cL + 0.006, 0.986, 0.5); break;
+        case 'free': wander(c, dt, g.bL + 0.004, g.bR - 0.004, 0.25); break;
+        case 'inj':
+          c.x += 0.35 * dt;
+          if (c.x > g.bL + 0.004) { c.s = 'B'; c.doom = Math.random() < 0.12; c.life = c.doom ? rnd(0.15, 0.5) : 0; c.stored = false; c.vx = 0.05; }
+          break;
+        case 'B':
+          c.x += 0.13 * dt;
+          hit = wander(c, dt, g.bL + 0.003, g.bR - 0.003, 0.25);
+          if (hit === 1) {
+            if ((!c.stored && Math.random() < pc) || (c.stored && pc > 0.9)) { c.s = 'sweep'; }
+            else { if (!c.stored) { c.stored = true; if (!c.doom) c.life = rnd(0.7, 1.6); } c.vx = -0.08; }
+          }
+          if (c.s === 'B' && (c.doom || c.stored)) {
+            c.life -= dt;
+            if (c.life <= 0) {
+              flashes.push({ x: c.x, y: c.y, t: 0 });
+              o = nearest('bas', 'free', c.x, c.y); if (o) o.s = 'gone';
+              cs.splice(i, 1);
+            }
+          }
+          break;
+        case 'sweep':
+          c.x += 0.8 * dt;
+          if (c.x > g.cL + 0.006) { c.s = 'C'; c.vx = 0.1; }
+          break;
+        case 'leave':
+          c.x += 0.35 * dt; c.a -= dt * 2.5;
+          if (c.a <= 0) cs.splice(i, 1);
+          break;
+        case 'back':
+          c.x -= 0.3 * dt;
+          if (c.x < g.eR - 0.012) { c.s = 'inE'; c.life = rnd(0.5, 1.0); c.vx = -0.06; }
+          break;
+        case 'inE':
+          wander(c, dt, 0.014, g.eR - 0.006, 0.5);
+          c.life -= dt; c.a = Math.max(0, Math.min(1, c.life / 0.3));
+          if (c.life <= 0) {
+            flashes.push({ x: c.x, y: c.y, t: 0 });
+            o = nearest('maj', 'E', c.x, c.y); if (o) o.s = 'gone';
+            cs.splice(i, 1);
+          }
+          break;
+        case 'gone':
+          c.a -= dt * 5;
+          if (c.a <= 0) cs.splice(i, 1);
+          break;
+      }
+    }
+    for (i = flashes.length - 1; i >= 0; i--) { flashes[i].t += dt; if (flashes[i].t > 0.45) flashes.splice(i, 1); }
+
+    // Injection across the base-emitter junction. Rate is compressed for visibility.
+    var rInj = IBu < 0.5 ? 0 : 13 * Math.pow(IBu / 60, 0.6);
+    if (cs.length < 260) {
+      acc.inj += rInj * dt; acc.back += rInj * 0.08 * dt;
+      while (acc.inj >= 1) {
+        acc.inj -= 1;
+        var f = cs.filter(function (c) { return c.k === 'maj' && c.s === 'E'; });
+        if (f.length) {
+          f.sort(function (p, q) { return q.x - p.x; });
+          f[Math.floor(Math.random() * Math.min(4, f.length))].s = 'inj';
+        }
+      }
+      while (acc.back >= 1) {
+        acc.back -= 1;
+        var fb = cs.filter(function (c) { return c.k === 'bas' && c.s === 'free'; });
+        if (fb.length) fb[Math.floor(Math.random() * fb.length)].s = 'back';
+      }
+    }
+    // Contacts keep each region topped up: carriers enter or leave through the leads.
+    tmr.e -= dt; tmr.b -= dt;
+    var nE = 0, nB = 0, nC = 0, far = null;
+    cs.forEach(function (c) {
+      if (c.s === 'E') nE++;
+      else if (c.s === 'free') nB++;
+      else if (c.s === 'C') { nC++; if (!far || c.x > far.x) far = c; }
+    });
+    if (nE < NE && tmr.e <= 0) { cs.push(mk('maj', 0.016, 'E')); tmr.e = 0.04; }
+    if (nC > NC && far) far.s = 'leave';
+    if (nB < NB && tmr.b <= 0) { c = mk('bas', rnd(g.bL + 0.01, g.bR - 0.01), 'free'); c.y = 0.05; c.vy = 0.3; cs.push(c); tmr.b = 0.08; }
+  }
+
+  // ---------- Drawing helpers ----------
+  function arrow(ctx, x1, y1, x2, y2, head) {
+    var a = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - head * Math.cos(a - 0.45), y2 - head * Math.sin(a - 0.45));
+    ctx.lineTo(x2 - head * Math.cos(a + 0.45), y2 - head * Math.sin(a + 0.45));
+    ctx.closePath(); ctx.fill();
+  }
+  function names() {
+    var npn = pol === 'npn';
+    return {
+      maj: npn ? 'electron' : 'hole', bas: npn ? 'hole' : 'electron',
+      majCol: npn ? col.n : col.p, basCol: npn ? col.p : col.n,
+      eT: npn ? 'n+' : 'p+', bT: npn ? 'p' : 'n', cT: npn ? 'n' : 'p'
+    };
+  }
+
+  // ---------- Drawing: device ----------
+  function drawDevice() {
+    var s = fit(dev, dctx), ctx = dctx, W = s.w, nm = names(), npn = pol === 'npn';
+    ctx.clearRect(0, 0, W, s.h);
+    var cw = 12, x0 = 14 + cw, x1 = W - 14 - cw, dw = x1 - x0, y0 = 56, dh = 156;
+    var X = function (nx) { return x0 + nx * dw; }, Y = function (ny) { return y0 + ny * dh; };
+    var g = geo();
+
+    // regions: emitter is the most heavily doped, so it gets the strongest tint
+    ctx.fillStyle = col.surface; ctx.fillRect(x0, y0, dw, dh);
+    ctx.fillStyle = nm.majCol; ctx.globalAlpha = 0.22; ctx.fillRect(x0, y0, X(g.eR) - x0, dh);
+    ctx.globalAlpha = 0.10; ctx.fillRect(X(g.cL), y0, x1 - X(g.cL), dh);
+    ctx.fillStyle = nm.basCol; ctx.globalAlpha = 0.14; ctx.fillRect(X(g.bL), y0, X(g.bR) - X(g.bL), dh);
+    ctx.globalAlpha = 1;
+    // contacts
+    ctx.fillStyle = col.muted;
+    ctx.fillRect(x0 - cw, y0, cw, dh); ctx.fillRect(x1, y0, cw, dh);
+    ctx.fillRect(X(XEB) + 4, y0 - cw, X(XCB) - X(XEB) - 8, cw);
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2; ctx.strokeRect(x0, y0, dw, dh);
+    // depletion edges
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = col.muted; ctx.lineWidth = 1; ctx.beginPath();
+    [g.eR, g.bL, g.bR, g.cL].forEach(function (v) { ctx.moveTo(X(v), y0); ctx.lineTo(X(v), y0 + dh); });
+    ctx.stroke(); ctx.setLineDash([]);
+    // field in the collector junction
+    var fw = X(g.cL) - X(g.bR);
+    if (fw > 26) {
+      ctx.strokeStyle = col.accent; ctx.fillStyle = col.accent; ctx.lineWidth = 2; ctx.globalAlpha = 0.8;
+      var fy = y0 + dh - 14, fa = X(g.bR) + 5, fb = X(g.cL) - 5;
+      if (npn) arrow(ctx, fb, fy, fa, fy, 6); else arrow(ctx, fa, fy, fb, fy, 6);
+      ctx.font = '600 12px ' + FONT; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText('E', (fa + fb) / 2, fy - 7); ctx.globalAlpha = 1;
+    }
+
+    // carriers
+    cs.forEach(function (c) {
+      if (c.a <= 0.01) return;
+      var px = X(c.x), py = Y(c.y), electron = (c.k === 'maj') === npn;
+      ctx.globalAlpha = c.a;
+      if (electron) { ctx.fillStyle = col.n; ctx.beginPath(); ctx.arc(px, py, 3.6, 0, 6.2832); ctx.fill(); }
+      else {
+        ctx.fillStyle = col.surface; ctx.strokeStyle = col.p; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(px, py, 4, 0, 6.2832); ctx.fill(); ctx.stroke();
+      }
+    });
+    flashes.forEach(function (f) {
+      ctx.globalAlpha = 1 - f.t / 0.45; ctx.strokeStyle = col.accent; ctx.lineWidth = 1.5;
+      ctx.beginPath(); ctx.arc(X(f.x), Y(f.y), 4 + f.t * 26, 0, 6.2832); ctx.stroke();
+    });
+    ctx.globalAlpha = 1;
+
+    // region labels
+    ctx.textBaseline = 'alphabetic'; ctx.font = '600 13px ' + FONT;
+    ctx.fillStyle = nm.majCol; ctx.textAlign = 'left'; ctx.fillText('emitter (' + nm.eT + ')', x0, 16);
+    ctx.textAlign = 'right'; ctx.fillText('collector (' + nm.cT + ')', x1, 16);
+    ctx.fillStyle = nm.basCol; ctx.textAlign = 'center'; ctx.fillText('base (' + nm.bT + ')', X((XEB + XCB) / 2), 16);
+
+    // terminal currents (conventional direction)
+    ctx.strokeStyle = col.ink; ctx.fillStyle = col.ink; ctx.lineWidth = 1.6; ctx.font = '12px ' + MONO;
+    var bx = X((XEB + XCB) / 2), cy = y0 + dh + 20;
+    if (npn) arrow(ctx, bx, 24, bx, y0 - cw - 3, 5); else arrow(ctx, bx, y0 - cw - 3, bx, 24, 5);
+    ctx.textAlign = 'left'; ctx.fillText('IB ' + IBu.toFixed(0) + ' µA', bx + 8, 38);
+    if (npn) arrow(ctx, x0 + 26, cy, x0 - cw, cy, 5); else arrow(ctx, x0 - cw, cy, x0 + 26, cy, 5);
+    ctx.fillText('IE ' + fmtI(op.ie), x0 + 34, cy + 4);
+    if (npn) arrow(ctx, x1 + cw, cy, x1 - 26, cy, 5); else arrow(ctx, x1 - 26, cy, x1 + cw, cy, 5);
+    ctx.textAlign = 'right'; ctx.fillText('IC ' + fmtI(op.ic), x1 - 34, cy + 4);
+
+    // ---- carrier concentration across the base ----
+    var by = y0 + dh + 52, base = by + 92, hmax = 74;
+    var hL = hmax * Math.min(1, op.u / UMAX), hR = hmax * Math.min(1, op.u * op.ex / UMAX);
+    if (IBu < 0.5) { hL = 0; hR = 0; }
+    ctx.fillStyle = col.muted; ctx.textAlign = 'left'; ctx.font = '600 11px ' + FONT;
+    ctx.fillText(nm.maj.toUpperCase() + ' CONCENTRATION ACROSS THE BASE', x0, by);
+    ctx.setLineDash([2, 4]); ctx.strokeStyle = col.line; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.moveTo(X(g.bL), y0 + dh + 30); ctx.lineTo(X(g.bL), base); ctx.moveTo(X(g.bR), y0 + dh + 30); ctx.lineTo(X(g.bR), base);
+    ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.moveTo(X(g.bL), base); ctx.lineTo(X(g.bL), base - hL); ctx.lineTo(X(g.bR), base - hR); ctx.lineTo(X(g.bR), base); ctx.closePath();
+    ctx.fillStyle = nm.majCol; ctx.globalAlpha = 0.3; ctx.fill(); ctx.globalAlpha = 1;
+    ctx.beginPath(); ctx.moveTo(X(g.bL), base - hL); ctx.lineTo(X(g.bR), base - hR);
+    ctx.strokeStyle = nm.majCol; ctx.lineWidth = 2; ctx.stroke();
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(x0, base); ctx.lineTo(x1, base); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.font = '12px ' + FONT;
+    ctx.textAlign = 'right'; ctx.fillText('emitter side', X(g.bL) - 8, base - 6);
+    ctx.textAlign = 'left'; ctx.fillText('collector side', X(g.bR) + 8, base - 6);
+  }
+
+  // ---------- Drawing: output characteristics ----------
+  function drawIV() {
+    var s = fit(iv, ictx), ctx = ictx, W = s.w, H = s.h, npn = pol === 'npn';
+    ctx.clearRect(0, 0, W, H);
+    var L = 54, R = 50, T = 20, B = 36, pw = W - L - R, ph = H - T - B, sc = niceScale(solve(60e-6, 10).ic), ymax = sc.max;
+    var X = function (v) { return L + v / 10 * pw; };
+    var Y = function (I) { return T + ph - Math.max(0, I) / ymax * ph; };
+
+    ctx.font = '11px ' + MONO; ctx.lineWidth = 1; ctx.textBaseline = 'middle';
+    sc.ticks.forEach(function (tk) {
+      var y = Y(tk.v); ctx.strokeStyle = col.line; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + pw, y); ctx.stroke();
+      ctx.fillStyle = col.muted; ctx.textAlign = 'right'; ctx.fillText(tk.s, L - 6, y);
+    });
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
+    [0, 2, 4, 6, 8, 10].forEach(function (v) {
+      var x = X(v); ctx.strokeStyle = col.line; ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke();
+      ctx.fillStyle = col.muted; ctx.fillText(String(v), x, T + ph + 15);
+    });
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(L, T); ctx.lineTo(L, T + ph); ctx.lineTo(L + pw, T + ph); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.font = '12px ' + FONT;
+    ctx.textAlign = 'right'; ctx.fillText((npn ? 'collector-emitter' : 'emitter-collector') + ' voltage (V)', L + pw, T + ph + 31);
+    ctx.textAlign = 'left'; ctx.fillText('collector current', L + 6, T + 2);
+    ctx.textAlign = 'right'; ctx.fillText('cutoff', L + pw - 4, T + ph - 6);
+    ctx.save(); ctx.translate(L + 16, T + ph - 8); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'left'; ctx.fillText('saturation', 0, 0); ctx.restore();
+
+    function curve(ibu) {
+      ctx.beginPath();
+      for (var i = 0; i <= 220; i++) {
+        var v = 10 * Math.pow(i / 220, 2.2), y = Y(solve(ibu * 1e-6, v).ic);
+        if (i === 0) ctx.moveTo(X(v), y); else ctx.lineTo(X(v), y);
+      }
+      ctx.stroke();
+    }
+    ctx.lineJoin = 'round'; ctx.font = '10px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    [10, 20, 30, 40, 50, 60].forEach(function (b) {
+      ctx.strokeStyle = col.muted; ctx.globalAlpha = 0.55; ctx.lineWidth = 1; curve(b);
+      ctx.globalAlpha = 1; ctx.fillStyle = col.muted; ctx.fillText(b + ' µA', L + pw + 5, Y(solve(b * 1e-6, 10).ic));
+    });
+    ctx.textBaseline = 'alphabetic';
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 2.2; curve(IBu);
+
+    var px = X(VCE), py = Y(op.ic);
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = col.accent; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, T + ph); ctx.moveTo(px, py); ctx.lineTo(L, py); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = col.accent; ctx.beginPath(); ctx.arc(px, py, 6, 0, 6.2832); ctx.fill();
+    ctx.strokeStyle = col.surface; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = '500 13px ' + MONO; ctx.fillStyle = col.ink;
+    var left = VCE > 5; ctx.textAlign = left ? 'right' : 'left';
+    ctx.fillText(fmtI(op.ic), px + (left ? -10 : 10), Math.max(T + 12, py - 12));
+  }
+
+  // ---------- Text and readouts ----------
+  function updateText() {
+    decor();
+    var nm = names(), npn = pol === 'npn';
+    var Maj = nm.maj.charAt(0).toUpperCase() + nm.maj.slice(1);
+    var vbeName = npn ? 'base-emitter' : 'emitter-base', vceName = npn ? 'collector-emitter' : 'emitter-collector';
+    $('ibOut').textContent = IBu.toFixed(0) + ' µA';
+    $('vceOut').textContent = VCE.toFixed(2) + ' V';
+    $('vceLbl').textContent = (npn ? 'Collector-emitter' : 'Emitter-collector') + ' voltage';
+    $('kVBE').textContent = (npn ? 'Base-emitter' : 'Emitter-base') + ' voltage';
+    $('lgCarrier').textContent = nm.maj;
+    $('rIC').textContent = fmtI(op.ic); $('rIE').textContent = fmtI(op.ie);
+    $('rVBE').textContent = op.vbe.toFixed(2) + ' V';
+    var gain = IBu < 0.5 ? null : op.ic / (IBu * 1e-6);
+    $('rG').textContent = gain === null ? 'n/a' : (Math.abs(gain) >= 10 ? gain.toFixed(0) : gain.toFixed(1));
+
+    var pill = $('exPill'), title, text;
+    if (reg === 'off') {
+      pill.textContent = 'Cutoff'; pill.className = 'pill off'; title = 'Switched off';
+      text = 'With no base current the ' + vbeName + ' junction is not forward biased, so the emitter injects no ' + nm.maj + 's into the base. The collector junction is reverse biased and blocks. Only a leakage current of ' + fmtI(op.ic) + ' flows, far too small to show. The transistor behaves like an open switch.';
+    } else if (reg === 'act') {
+      pill.textContent = 'Active'; pill.className = 'pill act'; title = 'Amplifying';
+      text = 'The base current forward biases the ' + vbeName + ' junction (' + op.vbe.toFixed(2) + ' V), and the heavily doped emitter injects ' + nm.maj + 's into the thin base. Nearly all of them diffuse across before they can recombine, reach the reverse-biased collector junction and are swept into the collector by its field. A few recombine with ' + nm.bas + 's in the base, and the base lead supplies replacements. So a base current of ' + IBu.toFixed(0) + ' µA controls a collector current of ' + fmtI(op.ic) + ', about ' + gain.toFixed(0) + ' times larger, and the ' + vceName + ' voltage hardly matters.';
+    } else {
+      pill.textContent = 'Saturation'; pill.className = 'pill sat'; title = 'Fully on';
+      text = 'The ' + vceName + ' voltage is so low (' + VCE.toFixed(2) + ' V) that the collector junction is no longer reverse biased and stops collecting efficiently. ' + Maj + 's pile up in the base, where more of them recombine. The collector current of ' + fmtI(op.ic) + ' is now limited by the collector voltage and not by the base current: the ratio of collector to base current has fallen to ' + (Math.abs(gain) >= 10 ? gain.toFixed(0) : gain.toFixed(1)) + '. The transistor behaves like a closed switch.';
+    }
+    $('exTitle').textContent = title; $('exText').textContent = text;
+    $('exDir').textContent = npn
+      ? 'In an npn transistor electrons carry the current from emitter to collector. Conventional current runs the other way: into the collector and the base, out of the emitter. The collector and base are positive relative to the emitter.'
+      : 'In a pnp transistor holes carry the current from emitter to collector, and conventional current follows them: into the emitter, out of the collector and the base. Every voltage is reversed compared with an npn, so the emitter is positive relative to the base and collector.';
+  }
+
+  // ---------- SPICE model parameters, editable by the user ----------
+  var HINT = 'Press Enter after editing a value. Scientific notation such as 1e-14 is accepted.';
+  function fmtP(v) {
+    if (v === 0) return '0';
+    var a = Math.abs(v);
+    if (a < 1e-3 || a >= 1e5) return v.toExponential().replace('e+', 'e');
+    return String(parseFloat(v.toPrecision(6)));
+  }
+  // Axis maximum and tick labels for a current axis that must reach m amps.
+  function niceScale(m) {
+    m = Math.max(m, 1e-12);
+    var u = m < 1e-9 ? [1e12, 'pA'] : m < 1e-6 ? [1e9, 'nA'] : m < 1e-3 ? [1e6, 'µA'] : m < 1 ? [1e3, 'mA'] : [1, 'A'];
+    var v = m * u[0], mag = Math.pow(10, Math.floor(Math.log10(v))), n = v / mag;
+    var opt = [[1, 0.2], [2, 0.5], [2.5, 0.5], [4, 1], [5, 1], [6, 2], [8, 2], [10, 2]], i, o = opt[opt.length - 1];
+    for (i = 0; i < opt.length; i++) if (n <= opt[i][0] * 1.0001) { o = opt[i]; break; }
+    var top = o[0] * mag, st = o[1] * mag, ticks = [];
+    for (i = 1; i * st <= top * 1.0001; i++) ticks.push({ v: i * st / u[0], s: parseFloat((i * st).toPrecision(3)) + ' ' + u[1] });
+    return { max: top / u[0], ticks: ticks };
+  }
+  function symbolSvg(title, lines, arrowPath, labels) {
+    var s = '<svg viewBox="0 0 120 96" width="120" height="96" role="img" aria-label="' + title + '"><g transform="translate(18,6)">' +
+      '<path class="sym" d="' + lines + '"/><path class="symf" d="' + arrowPath + '"/></g>';
+    labels.forEach(function (l) { s += '<text x="' + l[1] + '" y="' + l[2] + '" text-anchor="' + (l[3] || 'start') + '">' + l[0] + '</text>'; });
+    return s + '</svg>';
+  }
+  var decorKey = '';
+  function decor() {
+    var d = describe(), key = d.model + d.symbol;
+    if (key === decorKey) return;
+    decorKey = key; $('mline').textContent = d.model; $('sym').innerHTML = d.symbol; $('mdl').innerHTML = d.circuit;
+  }
+  function buildParams() {
+    var grid = $('pgrid');
+    SPEC.forEach(function (p) {
+      var l = document.createElement('label'); l.className = 'pf';
+      var b = document.createElement('b'); b.textContent = p.k;
+      var sp = document.createElement('span'); sp.textContent = p.d;
+      var inp = document.createElement('input'); inp.type = 'text'; inp.inputMode = 'decimal'; inp.id = 'p_' + p.k;
+      inp.autocomplete = 'off'; inp.value = fmtP(P[p.k]);
+      inp.addEventListener('change', function () {
+        var v = parseFloat(inp.value.replace(',', '.'));
+        if (!isFinite(v) || v < p.min || v > p.max) {
+          inp.classList.add('bad');
+          $('perr').textContent = p.k + ' must be a number from ' + fmtP(p.min) + ' to ' + fmtP(p.max) + '.';
+          return;
+        }
+        inp.classList.remove('bad'); $('perr').textContent = HINT;
+        P[p.k] = v; inp.value = fmtP(v); applyParams();
+      });
+      l.appendChild(b); l.appendChild(sp); l.appendChild(inp); grid.appendChild(l);
+    });
+    $('perr').textContent = HINT;
+    $('pReset').addEventListener('click', function () {
+      SPEC.forEach(function (p) { P[p.k] = p.def; var e = $('p_' + p.k); e.value = fmtP(p.def); e.classList.remove('bad'); });
+      $('perr').textContent = HINT; applyParams();
+    });
+  }
+  function liveEq() {
+    var npn = pol === 'npn', vbc = op.vbe - VCE, ict = op.ic + M.Is / M.bR * (op.u * op.ex - 1);
+    function sg(x) { return (x < 0 ? '−' : '') + Math.abs(x).toFixed(2) + ' V'; }
+    return '<i>V</i><sub>' + (npn ? 'BE' : 'EB') + '</sub> = ' + sg(op.vbe) + ', <i>V</i><sub>' + (npn ? 'BC' : 'CB') + '</sub> = ' + sg(vbc) +
+      ', <i>I</i><sub>CT</sub> = ' + fmtI(ict) + ', <i>I</i><sub>B</sub> = ' + fmtI(IBu * 1e-6) + ', <i>I</i><sub>C</sub> = ' + fmtI(op.ic) + ', <i>I</i><sub>E</sub> = ' + fmtI(op.ie);
+  }
+  // ---------- Equations, equivalent circuit and region pill ----------
+  function circuitSvg(kind, flip, t, src, cap) {
+    function tx(x, y, str, anchor) { return '<text x="' + x + '" y="' + y + '" text-anchor="' + (anchor || 'start') + '">' + str + '</text>'; }
+    function sub(m, sb) { return m + '<tspan dy="4" font-size="10">' + sb + '</tspan>'; }
+    var s = '<svg viewBox="0 0 230 200" width="230" height="200" role="img" aria-label="' + cap + '">';
+    if (kind === 'diode') {
+      s += '<path class="sym" d="M20 100H92M124 100H206M124 82V118M34 80H62"/><path class="symf" d="M92 82V118L124 100Z"/><path class="symf" d="M66 80L57 75.5V84.5Z"/>';
+      s += tx(49, 68, sub('I', 'D'), 'middle') + tx(20, 124, 'A') + tx(206, 124, 'K', 'end') + tx(66, 152, '+') + tx(108, 152, sub('V', 'D'), 'middle') + tx(146, 152, '−');
+    } else {
+      s += '<path class="sym" d="M170 12V78M170 122V188"/><circle class="sym" cx="170" cy="100" r="22"/>';
+      s += flip ? '<path class="sym" d="M170 114V94"/><path class="symf" d="M170 85L165 95H175Z"/>'
+                : '<path class="sym" d="M170 86V106"/><path class="symf" d="M170 115L165 105H175Z"/>';
+      s += tx(200, 104, src) + tx(180, 22, t[1]) + tx(180, 186, t[2]) + tx(24, 92, t[0]);
+      if (kind === 'three') {
+        s += '<path class="sym" d="M24 100H80M80 100V40H170M80 100V160H170"/>';
+        s += flip ? '<path class="symf" d="M70 62H90L80 78Z"/><path class="sym" d="M70 78H90"/><path class="symf" d="M70 138H90L80 122Z"/><path class="sym" d="M70 122H90"/>'
+                  : '<path class="symf" d="M70 78H90L80 62Z"/><path class="sym" d="M70 62H90"/><path class="symf" d="M70 122H90L80 138Z"/><path class="sym" d="M70 138H90"/>';
+        s += '<circle class="symf" cx="80" cy="100" r="3"/><circle class="symf" cx="170" cy="40" r="3"/><circle class="symf" cx="170" cy="160" r="3"/>';
+        s += tx(62, 74, sub('D', t[0] + t[1]), 'end') + tx(62, 134, sub('D', t[0] + t[2]), 'end');
+      } else {
+        s += '<path class="sym" d="M24 100H94"/><circle class="sym" cx="99" cy="100" r="5"/>';
+        s += tx(99, 128, sub('I', 'G') + '<tspan dy="-4"> = 0</tspan>', 'middle');
+      }
+    }
+    return s + '</svg><figcaption>' + cap + '</figcaption>';
+  }
+  function syncReg() {
+    var p = $('exPill'), q = $('ivPill'), key = p.className.split(' ')[1];
+    q.textContent = p.textContent; q.className = p.className;
+    Array.prototype.forEach.call(document.querySelectorAll('.eqrow[data-reg]'), function (r) {
+      r.classList.toggle('on', r.getAttribute('data-reg').split(' ').indexOf(key) >= 0);
+    });
+    $('eqLive').innerHTML = 'With the present settings: <span class="eq">' + liveEq() + '</span>';
+  }
+  var baseUpdateText = updateText;
+  updateText = function () { baseUpdateText(); syncReg(); };
+  function describe() {
+    var npn = pol === 'npn';
+    return {
+      model: '.model Q1 ' + (npn ? 'NPN' : 'PNP') + '(IS=' + fmtP(P.IS) + ' BF=' + fmtP(P.BF) + ' BR=' + fmtP(P.BR) + ' VAF=' + fmtP(P.VAF) + ')',
+      circuit: circuitSvg('three', !npn, ['B', 'C', 'E'], 'I<tspan dy="4" font-size="10">CT</tspan>', 'Ebers-Moll transport model of the ' + (npn ? 'npn' : 'pnp') + ' transistor: two junction diodes and a controlled current source.'),
+      symbol: symbolSvg((npn ? 'npn' : 'pnp') + ' transistor symbol with base B, collector C and emitter E',
+        'M6 42H32M32 22V62M32 34L58 18V6M32 50L58 66V78',
+        npn ? 'M58 66L46.5 64.5L51 57Z' : 'M36 52.5L43 62.1L47.8 54.5Z',
+        [['B', 24, 40], ['C', 84, 18], ['E', 84, 84]])
+    };
+  }
+  function applyParams() {
+    M.Is = P.IS; M.bF = P.BF; M.bR = P.BR; M.VA = P.VAF; UMAX = 60e-6 * M.bF / M.Is;
+    refresh();
+  }
+
+  // ---------- Controls ----------
+  function refresh() { recompute(); updateText(); if (paused) render(); }
+  $('ib').addEventListener('input', function (ev) { IBu = parseFloat(ev.target.value); refresh(); });
+  $('vce').addEventListener('input', function (ev) { VCE = parseFloat(ev.target.value); refresh(); });
+  $('presets').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    IBu = parseFloat(b.dataset.ib); VCE = parseFloat(b.dataset.v);
+    $('ib').value = IBu; $('vce').value = VCE; refresh();
+  });
+  $('type').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    pol = b.dataset.t;
+    Array.prototype.forEach.call(this.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+    refresh();
+  });
+  var last = 0;
+  function setPaused(p) {
+    paused = p; var b = $('pause');
+    b.textContent = p ? 'Play' : 'Pause'; b.setAttribute('aria-pressed', p ? 'true' : 'false');
+    last = 0;
+  }
+  $('pause').addEventListener('click', function () { setPaused(!paused); });
+
+  // ---------- Loop ----------
+  function render() { drawDevice(); drawIV(); }
+  function frame(t) {
+    if (!paused) {
+      var dt = last ? Math.min(0.05, (t - last) / 1000) : 0.016; last = t;
+      step(dt);
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+  buildParams(); applyParams();
+  if (reduced) { for (var i = 0; i < 150; i++) step(0.016); setPaused(true); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

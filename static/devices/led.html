@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LED Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a lab bench. Device cross-section and I-V curve side by side,
+   one control strip under them, readouts and explanation below. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --ink: #17212b;
+  --muted: #5d6b79;
+  --line: #d5dce3;
+  --p: #c2416b;        /* p-type, holes */
+  --n: #2466b0;        /* n-type, electrons */
+  --accent: #b06a00;   /* field, operating point */
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+    --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+  --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+}
+main { max-width: 1160px; margin: 0 auto; padding: 24px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+header h1 { font-family: var(--font-display); font-size: 30px; line-height: 1.15; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 65ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px; min-width: 0; }
+.panel h2 { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+canvas { display: block; width: 100%; height: 400px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.h { border: 2px solid var(--p); }
+.dot.e { background: var(--n); }
+.dot.ion { border: 1px solid var(--muted); width: 12px; height: 12px; font-size: 9px; line-height: 10px; text-align: center; color: var(--muted); }
+
+.controls { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.row > label, .row > .lbl { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-width: 92px; }
+input[type="range"] { flex: 1 1 260px; min-width: 0; accent-color: var(--accent); height: 28px; }
+output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 18px; min-width: 86px; text-align: right; }
+button {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.group { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.readouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.tile .k { font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.tile .v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 22px; margin-top: 2px; }
+
+.explain h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.rev { color: var(--n); } .pill.eq { color: var(--muted); } .pill.fwd { color: var(--p); } .pill.on { color: var(--accent); }
+.ph { width: 16px; height: 3px; border-radius: 2px; background: var(--accent); display: inline-block; }
+.explain p { margin: 0; max-width: 70ch; }
+.note { font-size: 13px; color: var(--muted); max-width: 90ch; margin: 0; }
+
+.h2row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.eqs { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; }
+.eqlist { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.eqrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 8px 10px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 4px; }
+.eqrow.on { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.eqrow .lbl2 { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.eq { font-family: "Cambria Math", "STIX Two Math", "Times New Roman", serif; font-size: 18px; line-height: 1.7; }
+.eq i { font-style: italic; }
+.pill.eq { font-family: var(--font-body); font-size: 12px; line-height: 1.5; }
+.eq .sp { font-family: var(--font-mono); font-size: 0.82em; }
+.eqnote { font-size: 13px; color: var(--muted); flex-basis: 100%; }
+.eqlive { margin: 10px 0 0; padding: 8px 10px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); font-size: 14px; overflow-x: auto; }
+.eqlive .eq { font-size: 17px; }
+.mdl { margin: 0; width: 230px; }
+.mdl svg { display: block; }
+.mdl .sym { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mdl .symf { fill: var(--ink); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.mdl text { font: 500 13px var(--font-mono); fill: var(--ink); }
+.mdl figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
+@media (max-width: 720px) { .eqs { grid-template-columns: minmax(0, 1fr); } }
+.head { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.symbol { flex: none; }
+.symbol svg { display: block; }
+.symbol .sym { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.symbol .symf { fill: var(--ink); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.symbol text { font: 500 13px var(--font-mono); fill: var(--muted); }
+.params { display: flex; flex-direction: column; gap: 10px; }
+.pgrid { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.pf { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.pf b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); font-size: 14px; }
+.pf input { font-family: var(--font-mono); font-size: 15px; width: 132px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+.pf input.bad { border-color: var(--p); outline: 1px solid var(--p); }
+.modelline { font-family: var(--font-mono); font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; margin: 0; }
+@media (max-width: 860px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  #iv { height: 300px; }
+  .readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+</style>
+</head>
+<body>
+<main>
+  <header class="head">
+    <div>
+    <p style="margin:0 0 6px"><a href="index.html" style="color:inherit">← All devices</a></p>
+    <h1>LED Explorer</h1>
+    <p>Forward bias a light-emitting diode, watch electrons and holes recombine into photons, and see how the band gap sets both the colour and the voltage.</p>
+    </div>
+    <div class="symbol" id="sym"></div>
+  </header>
+
+  <section class="bench">
+    <div class="panel">
+      <h2>Inside the junction</h2>
+      <canvas id="dev" role="img" aria-label="Cross-section of a light-emitting p-n junction with electrons and holes recombining and photons leaving, and its energy band diagram"></canvas>
+      <div class="legend">
+        <span><i class="dot h"></i>hole</span>
+        <span><i class="dot e"></i>electron</span>
+        <span><i class="dot ion">−</i>acceptor ion</span>
+        <span><i class="dot ion">+</i>donor ion</span>
+        <span><i class="ph"></i>photon</span>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="h2row">Current against voltage <span class="pill" id="ivPill"></span></h2>
+      <canvas id="iv" role="img" aria-label="Diode current-voltage curve with the present operating point marked"></canvas>
+    </div>
+  </section>
+
+  <section class="panel controls">
+    <div class="row">
+      <label for="bias">Voltage</label>
+      <input type="range" id="bias" min="0" max="2.6" step="0.01" value="1.9">
+      <output id="biasOut" for="bias">0.00 V</output>
+    </div>
+    <div class="row">
+      <span class="lbl">Material</span>
+      <div class="group" id="colour">
+        <button type="button" data-eg="1.32" data-rs="5" aria-pressed="false">Infrared</button>
+        <button type="button" data-eg="1.97" data-rs="5" aria-pressed="true">Red</button>
+        <button type="button" data-eg="2.1" data-rs="5" aria-pressed="false">Amber</button>
+        <button type="button" data-eg="2.36" data-rs="15" aria-pressed="false">Green</button>
+        <button type="button" data-eg="2.64" data-rs="15" aria-pressed="false">Blue</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="lbl">Jump to</span>
+      <div class="group" id="presets">
+        <button type="button" data-k="off">0 V</button>
+        <button type="button" data-k="dark">Below the knee</button>
+        <button type="button" data-k="i20">20 mA</button>
+        <button type="button" data-k="max">Full voltage</button>
+      </div>
+    </div>
+    <div class="row">
+      <span class="lbl">Highlight</span>
+      <div class="group" id="focus">
+        <button type="button" data-f="all" aria-pressed="true">Everything</button>
+        <button type="button" data-f="depletion" aria-pressed="false">Depletion region</button>
+        <button type="button" data-f="diffusion" aria-pressed="false">Injection and light</button>
+      </div>
+      <button type="button" id="pause" aria-pressed="false">Pause</button>
+    </div>
+  </section>
+
+  <section class="panel params">
+    <h2>Model parameters (SPICE names)</h2>
+    <div class="pgrid" id="pgrid"></div>
+    <pre class="modelline" id="mline"></pre>
+    <div class="row">
+      <button type="button" id="pReset">Reset to defaults</button>
+      <p class="note" id="perr" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="readouts">
+    <div class="tile"><div class="k">Applied voltage</div><div class="v" id="rV">0.00 V</div></div>
+    <div class="tile"><div class="k">Diode current</div><div class="v" id="rI">0 A</div></div>
+    <div class="tile"><div class="k">Wavelength</div><div class="v" id="rW">0.43 µm</div></div>
+    <div class="tile"><div class="k">Light output</div><div class="v" id="rB">0.71 V</div></div>
+  </section>
+
+  <section class="panel explain" aria-live="polite">
+    <h3><span id="exTitle">What is happening</span><span class="pill eq" id="exPill">Equilibrium</span></h3>
+    <p id="exText"></p>
+  </section>
+
+  <section class="panel">
+    <h2>Equations and model</h2>
+    <div class="eqs">
+      <ul class="eqlist">
+        <li class="eqrow"><span class="lbl2">Diode equation</span><span class="eq"><i>I</i><sub>D</sub> = <span class="sp">IS</span> · (e<sup>(<i>V</i><sub>D</sub> − <i>I</i><sub>D</sub> · <span class="sp">RS</span>) / (<span class="sp">N</span> · <i>V</i><sub>T</sub>)</sup> − 1)</span><span class="eqnote"><i>V</i><sub>T</sub> = kT/q = 25.85 mV at 27 °C, and <i>I</i><sub>D</sub> · <span class="sp">RS</span> is the drop in the series resistance. A wide band gap makes <span class="sp">IS</span> extremely small, which pushes the knee up to a voltage near <span class="sp">EG</span>.</span></li>
+        <li class="eqrow"><span class="lbl2">Colour</span><span class="eq">λ = <i>h</i> · <i>c</i> / <span class="sp">EG</span> ≈ 1240 nm / <span class="sp">EG</span></span><span class="eqnote">Each recombination releases about the band-gap energy <span class="sp">EG</span> (in eV) as one photon, so the material fixes the wavelength.</span></li>
+        <li class="eqrow"><span class="lbl2">Light output</span><span class="eq"><i>P</i><sub>light</sub> = η · <span class="sp">EG</span> · <i>I</i><sub>D</sub></span><span class="eqnote">Light output is proportional to current, not voltage. η is the fraction of electrons that produce a photon which escapes, taken here as 20%.</span></li>
+        <li class="eqrow" data-reg="eq"><span class="pill eq">Off</span><span class="eq"><i>I</i><sub>D</sub> = 0</span></li>
+        <li class="eqrow" data-reg="fwd"><span class="pill fwd">Below the knee</span><span class="eq"><i>I</i><sub>D</sub> ≈ <span class="sp">IS</span> · e<sup>(<i>V</i><sub>D</sub> − <i>I</i><sub>D</sub> · <span class="sp">RS</span>) / (<span class="sp">N</span> · <i>V</i><sub>T</sub>)</sup></span><span class="eqnote">Too little current to see any light.</span></li>
+        <li class="eqrow" data-reg="on"><span class="pill on">Emitting</span><span class="eq"><i>I</i><sub>D</sub> ≈ <span class="sp">IS</span> · e<sup>(<i>V</i><sub>D</sub> − <i>I</i><sub>D</sub> · <span class="sp">RS</span>) / (<span class="sp">N</span> · <i>V</i><sub>T</sub>)</sup></span><span class="eqnote">Above the knee the series resistance limits how fast the current rises, so in practice an LED is driven from a current source or through a resistor.</span></li>
+      </ul>
+      <figure class="mdl" id="mdl"></figure>
+    </div>
+    <p class="eqlive" id="eqLive"></p>
+  </section>
+
+  <p class="note">Model: the SPICE diode equation at 300 K with a series resistance and the parameters above. Choosing a material sets EG, RS and an IS that gives 20 mA at a junction voltage 0.1 V below the band gap. Light output assumes that 20% of the electrons yield a photon that escapes, whatever the current. No reverse breakdown, no heating and no efficiency droop. The emitted colour is computed from the band gap and is only an approximation of what the eye would see. Carrier and photon numbers are compressed; the readouts and the curve use the equations.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- Device model ----------
+  function isFor(eg) { return parseFloat((0.02 / Math.exp((eg - 0.1) / (2 * 0.025852))).toPrecision(3)); }   // 20 mA at a junction voltage of EG - 0.1 V with N = 2
+  var P = { IS: isFor(1.97), N: 2, RS: 5, EG: 1.97 };
+  var SPEC = [
+    { k: 'IS', d: 'saturation current (A)', def: isFor(1.97), min: 1e-40, max: 1e-9 },
+    { k: 'N', d: 'emission coefficient', def: 2, min: 1, max: 4 },
+    { k: 'RS', d: 'series resistance (Ω)', def: 5, min: 0, max: 50 },
+    { k: 'EG', d: 'band-gap energy (eV)', def: 1.97, min: 1, max: 3.5 }
+  ];
+  var M = { Vbi: 1.87, Vt: 0.025852, Is: P.IS, n: 2, rs: 5, W0: 0.2, Eg: 1.97 }, VMAX = 2.6, IREF = 0.05;
+  function iJ(vj) { return M.Is * (Math.exp(Math.min(700, vj / (M.n * M.Vt))) - 1); }
+  // Junction voltage for a terminal voltage V, allowing for the series resistance.
+  function vjOf(V) {
+    if (M.rs <= 0) return V;
+    var lo = V - 1, hi = V + 0.01, i, mid;
+    for (i = 0; i < 50; i++) { mid = (lo + hi) / 2; if (mid + M.rs * iJ(mid) > V) hi = mid; else lo = mid; }
+    return (lo + hi) / 2;
+  }
+  function current(V) { return iJ(vjOf(V)); }
+  function barrier(V) { return Math.max(M.Vbi - vjOf(V), 0.014); }
+  function widthUm(V) { return M.W0 * Math.sqrt(barrier(V) / M.Vbi); }
+  function widthFrac(V) { return 0.10 * Math.sqrt(barrier(V) / M.Vbi); }
+  function wavelength() { return 1239.84 / M.Eg; }
+  function lightOut(V) { return 0.2 * M.Eg * Math.max(0, current(V)); }          // watts, at 20% efficiency
+  // Approximate screen colour for the emitted wavelength; null outside the visible range.
+  function ledRGB() {
+    var w = wavelength(), r = 0, g = 0, b = 0;
+    if (w < 380 || w > 750) return null;
+    if (w < 440) { r = (440 - w) / 60; b = 1; }
+    else if (w < 490) { g = (w - 440) / 50; b = 1; }
+    else if (w < 510) { g = 1; b = (510 - w) / 20; }
+    else if (w < 580) { r = (w - 510) / 70; g = 1; }
+    else if (w < 645) { r = 1; g = (645 - w) / 65; }
+    else r = 1;
+    return [Math.round(255 * r), Math.round(215 * g), Math.round(255 * b)];
+  }
+  function ledCss(a) { var c = ledRGB(); return c ? 'rgba(' + c.join(',') + ',' + a + ')' : 'rgba(140,140,150,' + a + ')'; }
+  function bandName() {
+    var w = wavelength();
+    if (w < 380) return 'ultraviolet, invisible'; if (w > 750) return 'infrared, invisible';
+    return w < 450 ? 'violet' : w < 495 ? 'blue' : w < 570 ? 'green' : w < 590 ? 'yellow' : w < 620 ? 'orange' : 'red';
+  }
+
+  function fmtI(I) {
+    var a = Math.abs(I), s = I < 0 ? '−' : '';
+    if (a < 5e-17) return '0 A';
+    var u = [[1e-12, 1e15, 'fA'], [1e-9, 1e12, 'pA'], [1e-6, 1e9, 'nA'], [1e-3, 1e6, 'µA'], [1, 1e3, 'mA'], [Infinity, 1, 'A']];
+    for (var i = 0; i < u.length; i++) {
+      if (a < u[i][0]) {
+        var x = a * u[i][1];
+        return s + (x >= 100 ? x.toFixed(0) : x >= 10 ? x.toFixed(1) : x.toFixed(2)) + ' ' + u[i][2];
+      }
+    }
+  }
+  function fmtV(V) { return (V < 0 ? '−' : '') + Math.abs(V).toFixed(2) + ' V'; }
+
+  // ---------- State ----------
+  var V = 1.9, focus = 'all', paused = false;
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var $ = function (id) { return document.getElementById(id); };
+  var dev = $('dev'), iv = $('iv');
+  var dctx = dev.getContext('2d'), ictx = iv.getContext('2d');
+  var col = {};
+
+  function readTheme() {
+    var s = getComputedStyle(document.documentElement);
+    ['bg', 'surface', 'ink', 'muted', 'line', 'p', 'n', 'accent'].forEach(function (k) {
+      col[k] = s.getPropertyValue('--' + k).trim();
+    });
+  }
+  readTheme();
+  setInterval(readTheme, 700);
+
+  function fit(c, ctx) {
+    var r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    var w = Math.max(200, Math.round(r.width)), h = Math.round(r.height);
+    if (c.width !== w * d || c.height !== h * d) { c.width = w * d; c.height = h * d; }
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    return { w: w, h: h };
+  }
+  var FONT = '"IBM Plex Sans", system-ui, sans-serif';
+  var MONO = '"IBM Plex Mono", ui-monospace, monospace';
+
+  // ---------- Carriers ----------
+  var N = 34, cs = [];
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  function mk(t, x, s, tag) {
+    return { t: t, x: x, y: rnd(0.06, 0.94), vx: rnd(-0.08, 0.08), vy: rnd(-0.25, 0.25), s: s, tag: tag || '', a: 0, life: 0, hl: 0 };
+  }
+  function edges() { var w = widthFrac(V); return { l: 0.5 - w / 2, r: 0.5 + w / 2 }; }
+  function region(side, e) { return side === 'L' ? [0.014, e.l - 0.008] : [e.r + 0.008, 0.986]; }
+  function home(t) { return t === 'h' ? 'L' : 'R'; }
+  function away(t) { return t === 'h' ? 'R' : 'L'; }
+
+  (function init() {
+    var e = edges(), i, c;
+    for (i = 0; i < N; i++) {
+      c = mk('h', rnd(0.02, e.l - 0.01), 'free'); c.a = 1; cs.push(c);
+      c = mk('e', rnd(e.r + 0.01, 0.98), 'free'); c.a = 1; cs.push(c);
+    }
+  })();
+
+  function wander(c, dt, b) {
+    var q = Math.sqrt(dt);
+    c.vx += (Math.random() - 0.5) * 0.5 * q;
+    c.vy += (Math.random() - 0.5) * 1.6 * q;
+    c.vx *= 1 - 1.5 * dt; c.vy *= 1 - 1.5 * dt;
+    c.x += c.vx * dt; c.y += c.vy * dt;
+    if (c.y < 0.05) { c.y = 0.05; c.vy = Math.abs(c.vy); }
+    if (c.y > 0.95) { c.y = 0.95; c.vy = -Math.abs(c.vy); }
+    if (c.x < b[0]) { c.x = b[0]; c.vx = Math.abs(c.vx); }
+    if (c.x > b[1]) { c.x = b[1]; c.vx = -Math.abs(c.vx); }
+  }
+
+  var acc = { dh: 0.2, de: 0.7, gh: 0.5, ge: 0.0 }, spawnT = { h: 0, e: 0 }, photons = [];
+  function emit(x, y) { if (photons.length < 140) photons.push({ x: x, y: y, vx: rnd(-0.3, 0.3), vy: (Math.random() < 0.5 ? -1 : 1) * rnd(0.9, 1.5), t: 0 }); }
+  function fireDiff(t, e) {
+    var edge = t === 'h' ? e.l : e.r;
+    var f = cs.filter(function (c) { return c.t === t && c.s === 'free' && !c.tag; });
+    if (!f.length) return;
+    f.sort(function (a, b) { return Math.abs(a.x - edge) - Math.abs(b.x - edge); });
+    var c = f[Math.floor(Math.random() * Math.min(4, f.length))];
+    c.s = 'diffuse'; c.tag = 'diff';
+  }
+  function fireDrift(t, e) {
+    var b = region(away(t), e), x;
+    if (t === 'h') x = Math.min(b[1], e.r + rnd(0.03, 0.12)); else x = Math.max(b[0], e.l - rnd(0.03, 0.12));
+    cs.push(mk(t, x, 'gen', 'drift'));
+  }
+
+  function step(dt) {
+    var e = edges(), i, c, dir;
+    for (i = photons.length - 1; i >= 0; i--) { c = photons[i]; c.x += c.vx * dt; c.y += c.vy * dt; c.t += dt; if (c.y < -0.3 || c.y > 1.3) photons.splice(i, 1); }
+    for (i = cs.length - 1; i >= 0; i--) {
+      c = cs[i];
+      dir = c.t === 'h' ? 1 : -1; // direction from home side towards the other side
+      if (c.s !== 'injected' && c.s !== 'leave') c.a = Math.min(1, c.a + dt * 3);
+      if (c.hl > 0) { c.hl -= dt; if (c.hl <= 0) c.tag = ''; }
+      if (c.s === 'free') {
+        wander(c, dt, region(home(c.t), e));
+      } else if (c.s === 'diffuse') {
+        c.x += dir * 0.3 * dt; c.y += c.vy * dt * 0.3;
+        if ((dir > 0 && c.x > e.r + 0.012) || (dir < 0 && c.x < e.l - 0.012)) { c.s = 'injected'; c.life = rnd(0.35, 0.9); c.vx = dir * 0.12; }
+      } else if (c.s === 'injected') {
+        var rb = region(away(c.t), e);                 // injected carriers recombine close to the junction
+        if (c.t === 'h') rb = [rb[0], Math.min(rb[1], e.r + 0.14)]; else rb = [Math.max(rb[0], e.l - 0.14), rb[1]];
+        wander(c, dt, rb);
+        c.life -= dt; c.a = Math.max(0, Math.min(1, c.life / 0.35));
+        if (c.life <= 0) { emit(c.x, c.y); cs.splice(i, 1); }
+      } else if (c.s === 'gen') {
+        c.vx += -dir * 0.35 * dt;
+        var b = region(away(c.t), e);
+        wander(c, dt, b);
+        if ((c.t === 'h' && c.x <= b[0] + 0.004) || (c.t === 'e' && c.x >= b[1] - 0.004)) c.s = 'sweep';
+      } else if (c.s === 'sweep') {
+        c.x += -dir * 0.7 * dt;
+        if ((c.t === 'h' && c.x < e.l - 0.012) || (c.t === 'e' && c.x > e.r + 0.012)) { c.s = 'free'; c.hl = 1.4; c.vx = -dir * 0.1; }
+      } else if (c.s === 'leave') {
+        c.x += -dir * 0.35 * dt; c.a -= dt * 2.5;
+        if (c.a <= 0) cs.splice(i, 1);
+      }
+    }
+    // Crossing events. Rates are compressed for visibility; equal at zero bias.
+    var rDrift = 0.6, rDiff = 0.6 + 21 * Math.pow(Math.min(1, Math.max(0, current(V)) / IREF), 0.6);
+    if (cs.length < 240) {
+      acc.dh += rDiff * dt; acc.de += rDiff * dt; acc.gh += rDrift * dt; acc.ge += rDrift * dt;
+      while (acc.dh >= 1) { acc.dh -= 1; fireDiff('h', e); }
+      while (acc.de >= 1) { acc.de -= 1; fireDiff('e', e); }
+      while (acc.gh >= 1) { acc.gh -= 1; fireDrift('h', e); }
+      while (acc.ge >= 1) { acc.ge -= 1; fireDrift('e', e); }
+    }
+    // Contacts keep each neutral region topped up: carriers enter or leave through the wires.
+    ['h', 'e'].forEach(function (t) {
+      spawnT[t] -= dt;
+      var f = cs.filter(function (c) { return c.t === t && c.s === 'free'; });
+      if (f.length < N && spawnT[t] <= 0) {
+        cs.push(mk(t, t === 'h' ? 0.016 : 0.984, 'free')); spawnT[t] = 0.04;
+      } else if (f.length > N) {
+        var contact = t === 'h' ? 0 : 1, best = null;
+        f.forEach(function (c) { if (!c.tag && (!best || Math.abs(c.x - contact) < Math.abs(best.x - contact))) best = c; });
+        if (best) best.s = 'leave';
+      }
+    });
+  }
+
+  function vis(c) {
+    if (focus === 'all') return 1;
+    if (focus === 'depletion') return 0.3;
+    if (focus === 'diffusion') return c.tag === 'diff' ? 1 : 0.2;
+    return c.tag === 'drift' ? 1 : 0.2;
+  }
+
+  // ---------- Drawing: device ----------
+  function arrow(ctx, x1, y1, x2, y2, head) {
+    var a = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - head * Math.cos(a - 0.45), y2 - head * Math.sin(a - 0.45));
+    ctx.lineTo(x2 - head * Math.cos(a + 0.45), y2 - head * Math.sin(a + 0.45));
+    ctx.closePath(); ctx.fill();
+  }
+
+  function drawDevice() {
+    var s = fit(dev, dctx), ctx = dctx, W = s.w;
+    ctx.clearRect(0, 0, W, s.h);
+    var cw = 12, x0 = 14 + cw, x1 = W - 14 - cw, dw = x1 - x0, y0 = 46, dh = 168;
+    var X = function (nx) { return x0 + nx * dw; }, Y = function (ny) { return y0 + ny * dh; };
+    var e = edges(), xl = X(e.l), xr = X(e.r), xm = X(0.5);
+
+    // regions
+    ctx.globalAlpha = 0.13; ctx.fillStyle = col.p; ctx.fillRect(x0, y0, xl - x0, dh);
+    ctx.fillStyle = col.n; ctx.fillRect(xr, y0, x1 - xr, dh);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = col.surface; ctx.fillRect(xl, y0, xr - xl, dh);
+    // contacts
+    ctx.fillStyle = col.muted; ctx.fillRect(x0 - cw, y0, cw, dh); ctx.fillRect(x1, y0, cw, dh);
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2; ctx.strokeRect(x0, y0, dw, dh);
+    // junction and depletion edges
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = col.muted; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xl, y0); ctx.lineTo(xl, y0 + dh); ctx.moveTo(xr, y0); ctx.lineTo(xr, y0 + dh); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // glow around the junction, in the emitted colour
+    var lum = Math.min(1, lightOut(V) / (0.2 * M.Eg * IREF));
+    if (lum > 0.004) {
+      var gr = ctx.createRadialGradient(xm, y0 + dh / 2, 4, xm, y0 + dh / 2, dw * 0.34);
+      gr.addColorStop(0, ledCss(0.15 + 0.5 * lum)); gr.addColorStop(1, ledCss(0));
+      ctx.fillStyle = gr; ctx.fillRect(x0, y0, dw, dh);
+    }
+    // fixed ions in the depletion region
+    var em = focus === 'depletion';
+    ctx.globalAlpha = em ? 1 : 0.6; ctx.strokeStyle = col.muted; ctx.fillStyle = col.ink; ctx.lineWidth = 1;
+    ctx.font = '11px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    var sp = 20, gx, gy;
+    for (gx = xm - sp / 2; gx > xl + 6; gx -= sp) for (gy = y0 + 14; gy < y0 + dh - 8; gy += sp) {
+      ctx.beginPath(); ctx.arc(gx, gy, 6, 0, 6.2832); ctx.stroke(); ctx.fillText('−', gx, gy);
+    }
+    for (gx = xm + sp / 2; gx < xr - 6; gx += sp) for (gy = y0 + 14; gy < y0 + dh - 8; gy += sp) {
+      ctx.beginPath(); ctx.arc(gx, gy, 6, 0, 6.2832); ctx.stroke(); ctx.fillText('+', gx, gy);
+    }
+    ctx.globalAlpha = 1;
+
+    // carriers
+    cs.forEach(function (c) {
+      var a = c.a * vis(c); if (a <= 0.01) return;
+      var px = X(c.x), py = Y(c.y);
+      ctx.globalAlpha = a;
+      if (c.t === 'h') {
+        ctx.fillStyle = col.surface; ctx.strokeStyle = col.p; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(px, py, 4, 0, 6.2832); ctx.fill(); ctx.stroke();
+      } else {
+        ctx.fillStyle = col.n; ctx.beginPath(); ctx.arc(px, py, 3.6, 0, 6.2832); ctx.fill();
+      }
+      if (c.tag && (focus === 'diffusion' || focus === 'drift') && vis(c) === 1) {
+        ctx.strokeStyle = col.accent; ctx.lineWidth = 1.2;
+        ctx.beginPath(); ctx.arc(px, py, 8, 0, 6.2832); ctx.stroke();
+      }
+    });
+    ctx.globalAlpha = 1;
+
+    // photons leaving the junction
+    ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    photons.forEach(function (p) {
+      var px = X(p.x), py = Y(p.y), sp = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
+      ctx.strokeStyle = ledCss(Math.max(0, 0.95 - p.t * 0.5));
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px - p.vx / sp * 9, py - p.vy / sp * 9 * (dh / dw) * 3); ctx.stroke();
+    });
+    ctx.lineCap = 'butt';
+    // labels above
+    ctx.textBaseline = 'alphabetic'; ctx.font = '600 13px ' + FONT;
+    ctx.textAlign = 'left'; ctx.fillStyle = col.p; ctx.fillText('p-type', x0, 16);
+    ctx.textAlign = 'right'; ctx.fillStyle = col.n; ctx.fillText('n-type', x1, 16);
+    // depletion bracket
+    ctx.strokeStyle = col.ink; ctx.fillStyle = col.ink; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xl, y0 - 5); ctx.lineTo(xl, y0 - 11); ctx.lineTo(xr, y0 - 11); ctx.lineTo(xr, y0 - 5); ctx.stroke();
+    ctx.textAlign = 'center'; ctx.font = '12px ' + FONT;
+    ctx.fillText('depletion region  ' + widthUm(V).toFixed(2) + ' µm', xm, y0 - 17);
+
+    // field arrow (points from n to p)
+    var fl = Math.max(14, Math.min(xr - xl - 8, 90));
+    ctx.globalAlpha = em ? 1 : 0.75; ctx.strokeStyle = col.accent; ctx.fillStyle = col.accent; ctx.lineWidth = 2.2;
+    arrow(ctx, xm + fl / 2, y0 + dh - 14, xm - fl / 2, y0 + dh - 14, 7);
+    ctx.font = '600 12px ' + FONT; ctx.textAlign = 'center';
+    ctx.fillText('E', xm, y0 + dh - 22);
+    ctx.globalAlpha = 1;
+
+    // terminals
+    ctx.font = '12px ' + FONT; ctx.fillStyle = col.muted;
+    var sa = Math.abs(V) < 0.005 ? '' : (V > 0 ? '  (+)' : '  (−)'), sc = Math.abs(V) < 0.005 ? '' : (V > 0 ? '(−)  ' : '(+)  ');
+    ctx.textAlign = 'left'; ctx.fillText('anode' + sa, x0 - cw, y0 + dh + 17);
+    ctx.textAlign = 'right'; ctx.fillText(sc + 'cathode', x1 + cw, y0 + dh + 17);
+
+    // ---- energy bands ----
+    var by = y0 + dh + 44, k = 100 / (M.Vbi + M.Eg), drop = (M.Vbi - vjOf(V)) * k, Eg = M.Eg * k, ecp = by + 18;
+    ctx.fillStyle = col.muted; ctx.textAlign = 'left'; ctx.font = '600 11px ' + FONT;
+    ctx.fillText('ENERGY BANDS', x0, by);
+    function band(off, label) {
+      ctx.beginPath(); ctx.moveTo(x0, ecp + off); ctx.lineTo(xl, ecp + off);
+      for (var i = 1; i <= 24; i++) {
+        var t = i / 24, f = t < 0.5 ? 2 * t * t : 1 - 2 * (1 - t) * (1 - t);
+        ctx.lineTo(xl + (xr - xl) * t, ecp + off + drop * f);
+      }
+      ctx.lineTo(x1, ecp + off + drop);
+      ctx.strokeStyle = col.ink; ctx.lineWidth = 1.6; ctx.stroke();
+      ctx.fillStyle = col.ink; ctx.font = '12px ' + FONT; ctx.textAlign = 'left';
+      ctx.fillText(label, x0 + 4, ecp + off + (off ? 14 : -5));
+    }
+    band(0, 'conduction band'); band(Eg, 'valence band');
+    // an electron falls into a hole and gives up the band-gap energy as a photon
+    if (current(V) > 1e-4) {
+      var ya = ecp + drop * 0.5 + 2, yb2 = ya + Eg - 4;
+      ctx.strokeStyle = ledRGB() ? ledCss(1) : col.muted; ctx.fillStyle = ctx.strokeStyle; ctx.lineWidth = 2.4;
+      arrow(ctx, xm, ya, xm, yb2, 6);
+      ctx.font = '600 12px ' + FONT; ctx.textAlign = 'left'; ctx.fillStyle = col.ink;
+      ctx.fillText('photon ' + M.Eg.toFixed(2) + ' eV', xm + 10, (ya + yb2) / 2 + 4);
+    }
+    // barrier marker
+    var bx = X(0.86);
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = col.muted; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(xl, ecp); ctx.lineTo(bx + 8, ecp); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = col.accent; ctx.fillStyle = col.accent; ctx.lineWidth = 1.6;
+    if (drop > 12) { arrow(ctx, bx, ecp + 1, bx, ecp + drop - 1, 5); }
+    else { ctx.beginPath(); ctx.moveTo(bx, ecp); ctx.lineTo(bx, ecp + drop); ctx.stroke(); }
+    ctx.font = '12px ' + FONT; ctx.textAlign = 'right';
+    ctx.fillText('barrier ' + (M.Vbi - vjOf(V)).toFixed(2) + ' eV', x1, ecp - 6);
+  }
+
+  // ---------- Drawing: I-V curve ----------
+  function drawIV() {
+    var s = fit(iv, ictx), ctx = ictx, W = s.w, H = s.h;
+    ctx.clearRect(0, 0, W, H);
+    var L = 58, R = 14, T = 20, B = 36, pw = W - L - R, ph = H - T - B;
+    var vmin = -0.2, vmax = VMAX + 0.2, sc = niceScale(IREF), zy = T + ph, ps = ph / sc.max;
+    var X = function (v) { return L + (v - vmin) / (vmax - vmin) * pw; };
+    var Yi = function (I) { return zy - Math.min(I, sc.max * 1.02) * ps; };
+    var v, i;
+    ctx.font = '11px ' + MONO; ctx.lineWidth = 1; ctx.textBaseline = 'middle';
+    sc.ticks.forEach(function (tk) {
+      var y = zy - tk.v * ps; ctx.strokeStyle = col.line; ctx.beginPath(); ctx.moveTo(L, y); ctx.lineTo(L + pw, y); ctx.stroke();
+      ctx.fillStyle = col.muted; ctx.textAlign = 'right'; ctx.fillText(tk.s, L - 6, y);
+    });
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
+    for (v = 0; v <= vmax; v += 0.5) {
+      var x = X(v); ctx.strokeStyle = col.line; ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke();
+      ctx.fillStyle = col.muted; ctx.fillText(String(v), x, T + ph + 15);
+    }
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(L, zy); ctx.lineTo(L + pw, zy); ctx.moveTo(X(0), T); ctx.lineTo(X(0), T + ph); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.font = '12px ' + FONT;
+    ctx.textAlign = 'right'; ctx.fillText('voltage (V)', L + pw, T + ph + 31);
+    ctx.textAlign = 'left'; ctx.fillText('current, and light output in proportion', X(0) + 6, T + 2);
+    // the band gap, as a voltage
+    ctx.setLineDash([2, 3]); ctx.strokeStyle = col.muted; ctx.beginPath(); ctx.moveTo(X(M.Eg), T + 22); ctx.lineTo(X(M.Eg), T + ph); ctx.stroke(); ctx.setLineDash([]);
+    ctx.textAlign = 'center'; ctx.fillText('band gap', X(M.Eg), T + 17);
+    // light: the area under the curve up to the present voltage, in the emitted colour
+    ctx.beginPath(); ctx.moveTo(X(0), zy);
+    for (i = 0; i <= 200; i++) { v = V * i / 200; ctx.lineTo(X(v), Yi(current(v))); }
+    ctx.lineTo(X(V), zy); ctx.closePath(); ctx.fillStyle = ledCss(0.4); ctx.fill();
+    // curve
+    ctx.beginPath();
+    for (i = 0; i <= 400; i++) { v = VMAX * i / 400; if (i === 0) ctx.moveTo(X(v), Yi(current(v))); else ctx.lineTo(X(v), Yi(current(v))); }
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.stroke();
+    // operating point
+    var I = current(V), px = X(V), py = Yi(I);
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = col.accent; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(X(0), py); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = col.accent; ctx.beginPath(); ctx.arc(px, py, 6, 0, 6.2832); ctx.fill();
+    ctx.strokeStyle = col.surface; ctx.lineWidth = 2; ctx.stroke();
+    ctx.font = '500 13px ' + MONO; ctx.fillStyle = col.ink; ctx.textAlign = 'right';
+    ctx.fillText(fmtI(I), px - 10, Math.max(T + 34, py - 12));
+  }
+
+  // ---------- Text and readouts ----------
+  function updateText() {
+    decor();
+    var I = current(V), w = widthUm(V).toFixed(2), lam = wavelength(), po = lightOut(V), b = (M.Vbi - vjOf(V)).toFixed(2);
+    $('biasOut').textContent = fmtV(V); $('rV').textContent = fmtV(V);
+    $('rI').textContent = fmtI(I); $('rW').textContent = lam.toFixed(0) + ' nm';
+    $('rB').textContent = po < 1e-6 ? '0 mW' : (po * 1e3).toFixed(po * 1e3 >= 10 ? 1 : 2) + ' mW';
+    var pill = $('exPill'), title, text;
+    if (V <= 0.03) { pill.textContent = 'Off'; pill.className = 'pill eq'; }
+    else if (I < 1e-4) { pill.textContent = 'Below the knee'; pill.className = 'pill fwd'; }
+    else { pill.textContent = 'Emitting'; pill.className = 'pill on'; }
+
+    if (focus === 'depletion') {
+      title = 'Depletion region';
+      text = 'As in any p-n junction, the carriers near the junction have recombined and left fixed ions, whose field holds the rest apart. The barrier is much higher than in silicon, about ' + M.Vbi.toFixed(2) + ' eV with no voltage applied, because the band gap is wider. Forward bias lowers it; it is ' + b + ' eV now and the region is ' + w + ' µm wide.';
+    } else if (focus === 'diffusion') {
+      title = 'Injection and light';
+      text = 'Forward bias lets electrons from the n side and holes from the p side cross the junction. The ringed carriers have just been injected. Each one soon meets a carrier of the other kind and recombines, and in this material the energy released, ' + M.Eg.toFixed(2) + ' eV, leaves as a photon. In silicon the same energy would mostly end up as heat, which is why silicon diodes do not glow.';
+    } else if (V <= 0.03) {
+      title = 'No voltage, no light';
+      text = 'With no voltage applied the junction is in balance and no net current flows. The barrier of about ' + M.Vbi.toFixed(2) + ' eV keeps electrons and holes on their own sides, so they do not meet and no light is produced.';
+    } else if (I < 1e-4) {
+      title = 'Not enough voltage yet';
+      text = 'The junction is forward biased by ' + V.toFixed(2) + ' V, but that is well short of the ' + M.Eg.toFixed(2) + ' eV band gap, so very few carriers have the energy to cross. The current is only ' + fmtI(I) + ' and the LED is dark. An LED needs a forward voltage close to its band gap, so a blue LED needs more voltage than a red one.';
+    } else {
+      title = 'Emitting light';
+      text = 'Electrons from the n side and holes from the p side are injected across the junction and meet in a thin region around it. When an electron drops from the conduction band into a hole in the valence band it gives up the band-gap energy as a photon of ' + M.Eg.toFixed(2) + ' eV, which is light at ' + lam.toFixed(0) + ' nm (' + bandName() + '). More current means more recombinations each second and so more light: at ' + fmtI(I) + ' the output is about ' + (po * 1e3).toFixed(1) + ' mW. The series resistance takes ' + (I * M.rs).toFixed(2) + ' V of the applied voltage.';
+    }
+    $('exTitle').textContent = title; $('exText').textContent = text;
+  }
+
+  // ---------- SPICE model parameters, editable by the user ----------
+  var HINT = 'Press Enter after editing a value. Scientific notation such as 1e-14 is accepted.';
+  function fmtP(v) {
+    if (v === 0) return '0';
+    var a = Math.abs(v);
+    if (a < 1e-3 || a >= 1e5) return v.toExponential().replace('e+', 'e');
+    return String(parseFloat(v.toPrecision(6)));
+  }
+  // Axis maximum and tick labels for a current axis that must reach m amps.
+  function niceScale(m) {
+    m = Math.max(m, 1e-12);
+    var u = m < 1e-9 ? [1e12, 'pA'] : m < 1e-6 ? [1e9, 'nA'] : m < 1e-3 ? [1e6, 'µA'] : m < 1 ? [1e3, 'mA'] : [1, 'A'];
+    var v = m * u[0], mag = Math.pow(10, Math.floor(Math.log10(v))), n = v / mag;
+    var opt = [[1, 0.2], [2, 0.5], [2.5, 0.5], [4, 1], [5, 1], [6, 2], [8, 2], [10, 2]], i, o = opt[opt.length - 1];
+    for (i = 0; i < opt.length; i++) if (n <= opt[i][0] * 1.0001) { o = opt[i]; break; }
+    var top = o[0] * mag, st = o[1] * mag, ticks = [];
+    for (i = 1; i * st <= top * 1.0001; i++) ticks.push({ v: i * st / u[0], s: parseFloat((i * st).toPrecision(3)) + ' ' + u[1] });
+    return { max: top / u[0], ticks: ticks };
+  }
+  function symbolSvg(title, lines, arrowPath, labels) {
+    var s = '<svg viewBox="0 0 120 96" width="120" height="96" role="img" aria-label="' + title + '"><g transform="translate(18,6)">' +
+      '<path class="sym" d="' + lines + '"/><path class="symf" d="' + arrowPath + '"/></g>';
+    labels.forEach(function (l) { s += '<text x="' + l[1] + '" y="' + l[2] + '" text-anchor="' + (l[3] || 'start') + '">' + l[0] + '</text>'; });
+    return s + '</svg>';
+  }
+  var decorKey = '';
+  function decor() {
+    var d = describe(), key = d.model + d.symbol;
+    if (key === decorKey) return;
+    decorKey = key; $('mline').textContent = d.model; $('sym').innerHTML = d.symbol; $('mdl').innerHTML = d.circuit;
+  }
+  function buildParams() {
+    var grid = $('pgrid');
+    SPEC.forEach(function (p) {
+      var l = document.createElement('label'); l.className = 'pf';
+      var b = document.createElement('b'); b.textContent = p.k;
+      var sp = document.createElement('span'); sp.textContent = p.d;
+      var inp = document.createElement('input'); inp.type = 'text'; inp.inputMode = 'decimal'; inp.id = 'p_' + p.k;
+      inp.autocomplete = 'off'; inp.value = fmtP(P[p.k]);
+      inp.addEventListener('change', function () {
+        var v = parseFloat(inp.value.replace(',', '.'));
+        if (!isFinite(v) || v < p.min || v > p.max) {
+          inp.classList.add('bad');
+          $('perr').textContent = p.k + ' must be a number from ' + fmtP(p.min) + ' to ' + fmtP(p.max) + '.';
+          return;
+        }
+        inp.classList.remove('bad'); $('perr').textContent = HINT;
+        P[p.k] = v; inp.value = fmtP(v); applyParams();
+      });
+      l.appendChild(b); l.appendChild(sp); l.appendChild(inp); grid.appendChild(l);
+    });
+    $('perr').textContent = HINT;
+    $('pReset').addEventListener('click', function () {
+      SPEC.forEach(function (p) { P[p.k] = p.def; var e = $('p_' + p.k); e.value = fmtP(p.def); e.classList.remove('bad'); });
+      $('perr').textContent = HINT; applyParams();
+    });
+  }
+  function liveEq() {
+    var I = current(V);
+    return '<i>I</i><sub>D</sub> = ' + fmtP(P.IS) + ' A × (e<sup>(' + fmtV(V) + ' − ' + (I * M.rs).toFixed(2) + ' V) / ' + (M.n * M.Vt * 1000).toFixed(1) + ' mV</sup> − 1) = ' + fmtI(I) +
+      '; &nbsp; λ = 1240 / ' + M.Eg.toFixed(2) + ' = ' + wavelength().toFixed(0) + ' nm; &nbsp; <i>P</i><sub>light</sub> = 0.2 × ' + M.Eg.toFixed(2) + ' V × ' + fmtI(I) + ' = ' + (lightOut(V) * 1e3).toFixed(2) + ' mW';
+  }
+  // ---------- Equations, equivalent circuit and region pill ----------
+  function circuitSvg(kind, flip, t, src, cap) {
+    function tx(x, y, str, anchor) { return '<text x="' + x + '" y="' + y + '" text-anchor="' + (anchor || 'start') + '">' + str + '</text>'; }
+    function sub(m, sb) { return m + '<tspan dy="4" font-size="10">' + sb + '</tspan>'; }
+    var s = '<svg viewBox="0 0 230 200" width="230" height="200" role="img" aria-label="' + cap + '">';
+    if (kind === 'diode') {
+      s += '<path class="sym" d="M20 100H92M124 100H206M124 82V118M34 80H62"/><path class="symf" d="M92 82V118L124 100Z"/><path class="symf" d="M66 80L57 75.5V84.5Z"/>';
+      s += tx(49, 68, sub('I', 'D'), 'middle') + tx(20, 124, 'A') + tx(206, 124, 'K', 'end') + tx(66, 152, '+') + tx(108, 152, sub('V', 'D'), 'middle') + tx(146, 152, '−');
+    } else {
+      s += '<path class="sym" d="M170 12V78M170 122V188"/><circle class="sym" cx="170" cy="100" r="22"/>';
+      s += flip ? '<path class="sym" d="M170 114V94"/><path class="symf" d="M170 85L165 95H175Z"/>'
+                : '<path class="sym" d="M170 86V106"/><path class="symf" d="M170 115L165 105H175Z"/>';
+      s += tx(200, 104, src) + tx(180, 22, t[1]) + tx(180, 186, t[2]) + tx(24, 92, t[0]);
+      if (kind === 'three') {
+        s += '<path class="sym" d="M24 100H80M80 100V40H170M80 100V160H170"/>';
+        s += flip ? '<path class="symf" d="M70 62H90L80 78Z"/><path class="sym" d="M70 78H90"/><path class="symf" d="M70 138H90L80 122Z"/><path class="sym" d="M70 122H90"/>'
+                  : '<path class="symf" d="M70 78H90L80 62Z"/><path class="sym" d="M70 62H90"/><path class="symf" d="M70 122H90L80 138Z"/><path class="sym" d="M70 138H90"/>';
+        s += '<circle class="symf" cx="80" cy="100" r="3"/><circle class="symf" cx="170" cy="40" r="3"/><circle class="symf" cx="170" cy="160" r="3"/>';
+        s += tx(62, 74, sub('D', t[0] + t[1]), 'end') + tx(62, 134, sub('D', t[0] + t[2]), 'end');
+      } else {
+        s += '<path class="sym" d="M24 100H94"/><circle class="sym" cx="99" cy="100" r="5"/>';
+        s += tx(99, 128, sub('I', 'G') + '<tspan dy="-4"> = 0</tspan>', 'middle');
+      }
+    }
+    return s + '</svg><figcaption>' + cap + '</figcaption>';
+  }
+  function syncReg() {
+    var p = $('exPill'), q = $('ivPill'), key = p.className.split(' ')[1];
+    q.textContent = p.textContent; q.className = p.className;
+    Array.prototype.forEach.call(document.querySelectorAll('.eqrow[data-reg]'), function (r) {
+      r.classList.toggle('on', r.getAttribute('data-reg').split(' ').indexOf(key) >= 0);
+    });
+    $('eqLive').innerHTML = 'With the present settings: <span class="eq">' + liveEq() + '</span>';
+  }
+  var baseUpdateText = updateText;
+  updateText = function () { baseUpdateText(); syncReg(); };
+  function describe() {
+    return {
+      model: '.model D1 D(IS=' + fmtP(P.IS) + ' N=' + fmtP(P.N) + ' RS=' + fmtP(P.RS) + ' EG=' + fmtP(P.EG) + ')',
+      circuit: circuitSvg('diode', false, [], '', 'Sign convention: the voltage is measured at the anode relative to the cathode, and the current flows from anode to cathode. Light is emitted only in forward bias.'),
+      symbol: symbolSvg('LED symbol with anode A and cathode K', 'M6 42H30M54 42H78M54 26V58M40 20L50 8M50 8L44 10M50 8L49 14.5M54 22L64 10M64 10L58 12M64 10L63 16.5', 'M30 26V58L54 42Z', [['A', 24, 40], ['K', 96, 40, 'end']])
+    };
+  }
+  function v20() { var lo = 0, hi = VMAX, i, mid; for (i = 0; i < 40; i++) { mid = (lo + hi) / 2; if (current(mid) > 0.02) hi = mid; else lo = mid; } return (lo + hi) / 2; }
+  function applyParams() {
+    M.Is = P.IS; M.n = P.N; M.rs = P.RS; M.Eg = P.EG; M.Vbi = P.EG - 0.1;
+    VMAX = Math.round((P.EG + 0.6) * 20) / 20;
+    var e = $('bias'); e.max = VMAX.toFixed(2);
+    IREF = Math.max(1e-6, current(VMAX));
+    V = Math.min(V, VMAX); e.value = V;
+    Array.prototype.forEach.call($('colour').querySelectorAll('button'), function (x) {
+      x.setAttribute('aria-pressed', Math.abs(parseFloat(x.dataset.eg) - P.EG) < 0.005 ? 'true' : 'false');
+    });
+    updateText(); if (paused) render();
+  }
+
+  // ---------- Controls ----------
+  function setV(v) { V = Math.max(0, Math.min(VMAX, v)); $('bias').value = V; updateText(); if (paused) render(); }
+  $('colour').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    P.EG = parseFloat(b.dataset.eg); P.RS = parseFloat(b.dataset.rs); P.N = 2; P.IS = isFor(P.EG);
+    SPEC.forEach(function (p) { var e = $('p_' + p.k); e.value = fmtP(P[p.k]); e.classList.remove('bad'); });
+    applyParams(); setV(v20());
+  });
+  $('bias').addEventListener('input', function (ev) { setV(parseFloat(ev.target.value)); });
+  $('presets').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    var k = b.dataset.k; setV(k === 'off' ? 0 : k === 'dark' ? M.Eg - 0.6 : k === 'i20' ? v20() : VMAX);
+  });
+  $('focus').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    focus = b.dataset.f;
+    Array.prototype.forEach.call(this.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+    updateText(); if (paused) render();
+  });
+  function setPaused(p) {
+    paused = p; var b = $('pause');
+    b.textContent = p ? 'Play' : 'Pause'; b.setAttribute('aria-pressed', p ? 'true' : 'false');
+    last = 0;
+  }
+  $('pause').addEventListener('click', function () { setPaused(!paused); });
+
+  // ---------- Loop ----------
+  function render() { drawDevice(); drawIV(); }
+  var last = 0;
+  function frame(t) {
+    if (!paused) {
+      var dt = last ? Math.min(0.05, (t - last) / 1000) : 0.016; last = t;
+      step(dt);
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+  buildParams(); applyParams();
+  if (reduced) { for (var i = 0; i < 120; i++) step(0.016); setPaused(true); }
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

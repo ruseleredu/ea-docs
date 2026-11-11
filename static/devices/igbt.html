@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IGBT Explorer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a lab bench. Device cross-section and characteristic curves side by side,
+   one control strip under them, readouts and explanation below. */
+:root {
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --ink: #17212b;
+  --muted: #5d6b79;
+  --line: #d5dce3;
+  --p: #c2416b;        /* p-type, holes */
+  --n: #2466b0;        /* n-type, electrons */
+  --accent: #b06a00;   /* field, operating point, recombination */
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", sans-serif;
+  --font-body: "IBM Plex Sans", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+    --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f151b; --surface: #18212a; --ink: #e6edf3; --muted: #94a3b1;
+  --line: #2c3945; --p: #f07a9c; --n: #6db3f2; --accent: #e5b454;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--font-body); font-size: 16px; line-height: 1.5;
+}
+main { max-width: 1160px; margin: 0 auto; padding: 24px 16px 40px; display: flex; flex-direction: column; gap: 16px; }
+header h1 { font-family: var(--font-display); font-size: 30px; line-height: 1.15; margin: 0; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 65ch; }
+.bench { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 16px; }
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 12px; min-width: 0; }
+.panel h2 { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin: 0 0 6px; }
+canvas { display: block; width: 100%; height: 380px; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--muted); margin-top: 8px; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.h { border: 2px solid var(--p); }
+.dot.e { background: var(--n); }
+.dot.r { border: 1.5px solid var(--accent); width: 13px; height: 13px; }
+.sw { width: 14px; height: 10px; border: 1px dashed var(--muted); display: inline-block; }
+
+.controls { display: flex; flex-direction: column; gap: 14px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; }
+.row > label, .row > .lbl { font-size: 13px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); min-width: 190px; }
+input[type="range"] { flex: 1 1 240px; min-width: 0; accent-color: var(--accent); height: 28px; }
+output { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 18px; min-width: 86px; text-align: right; }
+button {
+  font: inherit; font-size: 14px; color: var(--ink); background: var(--surface);
+  border: 1px solid var(--line); border-radius: 4px; padding: 6px 12px; cursor: pointer;
+}
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--surface); border-color: var(--ink); }
+.group { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.readouts { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; }
+.tile .k { font-size: 12px; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; }
+.tile .v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: 22px; margin-top: 2px; }
+
+.explain h3 { margin: 0 0 6px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.pill { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid currentColor; }
+.pill.off { color: var(--muted); } .pill.ohm { color: var(--accent); } .pill.sat { color: var(--n); }
+.explain p { margin: 0 0 8px; max-width: 70ch; }
+.explain p:last-child { margin-bottom: 0; }
+.note { font-size: 13px; color: var(--muted); max-width: 90ch; margin: 0; }
+
+.h2row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.eqs { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: start; }
+.eqlist { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; min-width: 0; }
+.eqrow { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; padding: 8px 10px; border: 1px solid var(--line); border-left-width: 3px; border-radius: 4px; }
+.eqrow.on { border-left-color: var(--accent); background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.eqrow .lbl2 { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
+.eq { font-family: "Cambria Math", "STIX Two Math", "Times New Roman", serif; font-size: 18px; line-height: 1.7; }
+.eq i { font-style: italic; }
+.eq .sp { font-family: var(--font-mono); font-size: 0.82em; }
+.eqnote { font-size: 13px; color: var(--muted); flex-basis: 100%; }
+.eqlive { margin: 10px 0 0; padding: 8px 10px; border-radius: 4px; background: var(--bg); border: 1px solid var(--line); font-size: 14px; overflow-x: auto; }
+.eqlive .eq { font-size: 17px; }
+.mdl { margin: 0; width: 230px; }
+.mdl svg { display: block; }
+.mdl .sym { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.mdl .symf { fill: var(--ink); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.mdl text { font: 500 13px var(--font-mono); fill: var(--ink); }
+.mdl figcaption { font-size: 13px; color: var(--muted); margin-top: 6px; }
+@media (max-width: 720px) { .eqs { grid-template-columns: minmax(0, 1fr); } }
+.head { display: flex; gap: 16px; align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.symbol { flex: none; }
+.symbol svg { display: block; }
+.symbol .sym { fill: none; stroke: var(--ink); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.symbol .symf { fill: var(--ink); stroke: var(--ink); stroke-width: 1; stroke-linejoin: round; }
+.symbol text { font: 500 13px var(--font-mono); fill: var(--muted); }
+.params { display: flex; flex-direction: column; gap: 10px; }
+.pgrid { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+.pf { display: flex; flex-direction: column; gap: 2px; font-size: 12px; color: var(--muted); }
+.pf b { font-family: var(--font-mono); font-weight: 500; color: var(--ink); font-size: 14px; }
+.pf input { font-family: var(--font-mono); font-size: 15px; width: 132px; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+.pf input.bad { border-color: var(--p); outline: 1px solid var(--p); }
+.modelline { font-family: var(--font-mono); font-size: 13px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: 8px 10px; overflow-x: auto; white-space: nowrap; margin: 0; }
+@media (max-width: 860px) {
+  .bench { grid-template-columns: minmax(0, 1fr); }
+  #iv { height: 300px; }
+  .readouts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .row > label, .row > .lbl { min-width: 100%; }
+}
+.sw.ox { border: 1px solid var(--accent); background: color-mix(in srgb, var(--accent) 28%, transparent); }
+</style>
+</head>
+<body>
+<main>
+  <header class="head">
+    <div>
+    <p style="margin:0 0 6px"><a href="index.html" style="color:inherit">← All devices</a></p>
+    <h1>IGBT Explorer</h1>
+    <p>Set the gate and collector voltages of an insulated-gate bipolar transistor and watch a MOSFET channel switch on a flood of bipolar current.</p>
+    </div>
+    <div class="symbol" id="sym"></div>
+  </header>
+
+  <section class="bench">
+    <div class="panel">
+      <h2>Inside the IGBT</h2>
+      <canvas id="dev" role="img" aria-label="Cross-section of one cell of a vertical IGBT with emitter and gate on top, the p body, the n-minus drift region and the p-plus collector layer, with moving carriers"></canvas>
+      <div class="legend">
+        <span><i class="dot h"></i>hole</span>
+        <span><i class="dot e"></i>electron</span>
+        <span><i class="sw"></i>depletion region</span>
+        <span><i class="sw ox"></i>oxide</span>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 class="h2row">Transfer and output characteristics <span class="pill" id="ivPill"></span></h2>
+      <canvas id="iv" role="img" aria-label="Collector current against gate voltage on the left and against collector voltage on the right, with the present operating point marked"></canvas>
+    </div>
+  </section>
+
+  <section class="panel controls">
+    <div class="row">
+      <label for="vgs">Gate-emitter voltage</label>
+      <input type="range" id="vgs" min="0" max="15" step="0.1" value="12">
+      <output id="vgsOut" for="vgs">+12.00 V</output>
+    </div>
+    <div class="row">
+      <label for="vds">Collector-emitter voltage</label>
+      <input type="range" id="vds" min="0" max="10" step="0.05" value="3">
+      <output id="vdsOut" for="vds">+3.00 V</output>
+    </div>
+    <div class="row">
+      <span class="lbl">Jump to</span>
+      <div class="group" id="presets">
+        <button type="button" data-g="-99" data-v="5">Gate at 0 V</button>
+        <button type="button" data-g="-1" data-v="5">Below threshold</button>
+        <button type="button" data-g="10" data-v="1.5">On-state</button>
+        <button type="button" data-g="3" data-v="8">Active</button>
+      </div>
+      <button type="button" id="pause" aria-pressed="false">Pause</button>
+    </div>
+  </section>
+
+  <section class="panel params">
+    <h2>Model parameters (SPICE names)</h2>
+    <div class="pgrid" id="pgrid"></div>
+    <pre class="modelline" id="mline"></pre>
+    <div class="row">
+      <button type="button" id="pReset">Reset to defaults</button>
+      <p class="note" id="perr" aria-live="polite"></p>
+    </div>
+  </section>
+
+  <section class="readouts">
+    <div class="tile"><div class="k">Collector current</div><div class="v" id="rID">0 A</div></div>
+    <div class="tile"><div class="k">Gate current</div><div class="v">0 A</div></div>
+    <div class="tile"><div class="k">Gate voltage beyond threshold</div><div class="v" id="rOV">0.00 V</div></div>
+    <div class="tile"><div class="k">Power dissipated</div><div class="v" id="rR">0 W</div></div>
+  </section>
+
+  <section class="panel explain" aria-live="polite">
+    <h3><span id="exTitle">What is happening</span><span class="pill sat" id="exPill">Active</span></h3>
+    <p id="exText"></p>
+    <p id="exDir"></p>
+  </section>
+
+  <section class="panel">
+    <h2>Equations and model</h2>
+    <div class="eqs">
+      <ul class="eqlist">
+        <li class="eqrow"><span class="lbl2">pnp section</span><span class="eq"><i>I</i><sub>C</sub> = (1 + <span class="sp">BF</span>) · <i>I</i><sub>MOS</sub></span><span class="eqnote">The electron current through the MOSFET channel is the base current of the pnp transistor. The collector current is that base current plus the hole current it calls up.</span></li>
+        <li class="eqrow"><span class="lbl2">Voltage split</span><span class="eq"><i>V</i><sub>CE</sub> = <i>V</i><sub>DS</sub> + <i>V</i><sub>EB</sub>, &nbsp; <i>V</i><sub>EB</sub> = <i>V</i><sub>T</sub> · ln(<i>I</i><sub>C</sub> / <span class="sp">IS</span> + 1)</span><span class="eqnote"><i>V</i><sub>DS</sub> is the voltage across the channel and <i>V</i><sub>EB</sub> the drop across the forward-biased p+ collector junction. <i>V</i><sub>T</sub> = kT/q = 25.85 mV at 27 °C.</span></li>
+        <li class="eqrow" data-reg="off"><span class="pill off">Cutoff</span><span class="eq"><i>I</i><sub>C</sub> = 0</span><span class="eqnote">When <i>V</i><sub>GE</sub> ≤ <span class="sp">VTO</span>.</span></li>
+        <li class="eqrow" data-reg="ohm"><span class="pill ohm">On-state</span><span class="eq"><i>I</i><sub>MOS</sub> = <span class="sp">KP</span> · ((<i>V</i><sub>GE</sub> − <span class="sp">VTO</span>) · <i>V</i><sub>DS</sub> − <i>V</i><sub>DS</sub><sup>2</sup> / 2) · (1 + <span class="sp">LAMBDA</span> · <i>V</i><sub>DS</sub>)</span><span class="eqnote">When <i>V</i><sub>DS</sub> &lt; <i>V</i><sub>GE</sub> − <span class="sp">VTO</span>. The channel is not pinched off and the load sets the current.</span></li>
+        <li class="eqrow" data-reg="sat"><span class="pill sat">Active</span><span class="eq"><i>I</i><sub>MOS</sub> = (<span class="sp">KP</span> / 2) · (<i>V</i><sub>GE</sub> − <span class="sp">VTO</span>)<sup>2</sup> · (1 + <span class="sp">LAMBDA</span> · <i>V</i><sub>DS</sub>)</span><span class="eqnote">When <i>V</i><sub>DS</sub> ≥ <i>V</i><sub>GE</sub> − <span class="sp">VTO</span>. The channel is pinched off and the gate voltage sets the current.</span></li>
+      </ul>
+      <figure class="mdl" id="mdl"></figure>
+    </div>
+    <p class="eqlive" id="eqLive"></p>
+  </section>
+
+  <p class="note">Model: a SPICE level 1 n-channel MOSFET (VTO, KP, LAMBDA, W/L = 1) supplying the base current of a pnp transistor (IS, BF), which is the usual two-device macro-model of an IGBT. No tail current, no latch-up, no temperature effects and no breakdown, and the gain of the pnp section is taken as constant. The collector voltage range is kept low so that the on-state region is readable; a real IGBT blocks hundreds of volts. The cross-section is a sketch of one cell with exaggerated layer thicknesses, and carrier numbers and speeds are compressed. The readouts and curves use the equations.</p>
+</main>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- Device model: level 1 MOSFET driving the base of a pnp transistor ----------
+  var P = { VTO: 5, KP: 0.25, LAMBDA: 0.005, BF: 1, IS: 1e-12 };
+  var SPEC = [
+    { k: 'VTO', d: 'MOSFET threshold voltage (V)', def: 5, min: 2, max: 8 },
+    { k: 'KP', d: 'MOSFET transconductance (A/V²)', def: 0.25, min: 0.01, max: 2 },
+    { k: 'LAMBDA', d: 'channel-length modulation (1/V)', def: 0.005, min: 0, max: 0.05 },
+    { k: 'BF', d: 'pnp forward current gain', def: 1, min: 0.1, max: 5 },
+    { k: 'IS', d: 'pnp saturation current (A)', def: 1e-12, min: 1e-15, max: 1e-9 }
+  ];
+  var M = { VTH: 5, K: 0.25, lam: 0.005, BF: 1, IS: 1e-12, Vt: 0.025852 }, IMAX = 30;
+  function fmos(vov, vds) { return (vds < vov ? M.K * (vov * vds - vds * vds / 2) : M.K / 2 * vov * vov) * (1 + M.lam * vds); }
+  function vebOf(ic) { return M.Vt * Math.log(ic / M.IS + 1); }
+  // Voltage across the channel: the part of the collector voltage left after the collector junction drop.
+  function chanV(vg, v) {
+    var vov = vg - M.VTH; if (vov <= 0 || v <= 0) return 0;
+    var lo = 0, hi = v, i, mid;
+    for (i = 0; i < 40; i++) { mid = (lo + hi) / 2; if (mid + vebOf((1 + M.BF) * fmos(vov, mid)) > v) hi = mid; else lo = mid; }
+    return (lo + hi) / 2;
+  }
+  function idOf(vg, v) {
+    var vov = vg - M.VTH; if (vov <= 0 || v <= 0) return 0;
+    return (1 + M.BF) * fmos(vov, chanV(vg, v));
+  }
+  function fmtI(I) {
+    var a = Math.abs(I);
+    if (a < 5e-7) return '0 A';
+    if (a < 1e-3) return (a * 1e6).toFixed(0) + ' µA';
+    if (a < 1) return (a * 1e3).toFixed(a >= 0.1 ? 0 : 1) + ' mA';
+    return a.toFixed(a >= 10 ? 1 : 2) + ' A';
+  }
+  function fmtR(r) {
+    if (!isFinite(r)) return 'open';
+    if (r >= 1e6) return (r / 1e6).toFixed(1) + ' MΩ';
+    if (r >= 1e3) return (r / 1e3).toFixed(2) + ' kΩ';
+    return r.toFixed(0) + ' Ω';
+  }
+  function sv(x, plus) { return (x < -0.004 ? '−' : (x > 0.004 && plus ? '+' : '')) + Math.abs(x).toFixed(2) + ' V'; }
+
+  // ---------- State ----------
+  var pol = 'n', VG = 12, VDS = 3, paused = false, ID = 0, reg = 'off', VCH = 0, VEB = 0;
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var $ = function (id) { return document.getElementById(id); };
+  var dev = $('dev'), iv = $('iv');
+  var dctx = dev.getContext('2d'), ictx = iv.getContext('2d');
+  var col = {};
+
+  function readTheme() {
+    var s = getComputedStyle(document.documentElement);
+    ['bg', 'surface', 'ink', 'muted', 'line', 'p', 'n', 'accent'].forEach(function (k) {
+      col[k] = s.getPropertyValue('--' + k).trim();
+    });
+  }
+  readTheme();
+  setInterval(readTheme, 700);
+
+  function fit(c, ctx) {
+    var r = c.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+    var w = Math.max(200, Math.round(r.width)), h = Math.round(r.height);
+    if (c.width !== w * d || c.height !== h * d) { c.width = w * d; c.height = h * d; }
+    ctx.setTransform(d, 0, 0, d, 0, 0);
+    return { w: w, h: h };
+  }
+  var FONT = '"IBM Plex Sans", system-ui, sans-serif';
+  var MONO = '"IBM Plex Mono", ui-monospace, monospace';
+
+  function recompute() {
+    var vov = VG - M.VTH;
+    VCH = chanV(VG, VDS); ID = idOf(VG, VDS); VEB = Math.max(0, VDS - VCH);
+    reg = (vov <= 0) ? 'off' : (VCH < vov ? 'ohm' : 'sat');
+  }
+
+  // ---------- Geometry: one cell of a vertical IGBT (normalised 0..1, y downwards) ----------
+  var YS = 0.22, BX = 0.62, BY = 0.50, EX0 = 0.10, EX1 = 0.50, EY = 0.33, CY = 0.80, MY = 0.93;
+  function dJ() { return 0.012 + 0.16 * Math.sqrt(Math.min(1, VDS / 10)); }       // reach of the body junction's depletion region
+  function blocked(x, y) { var d = dJ(); return y < YS + 0.02 || (x < BX + d && y < BY + d); }
+
+  // ---------- Carriers ----------
+  function rnd(a, b) { return a + Math.random() * (b - a); }
+  var BOXES = { em: [EX0 + 0.012, EX1 - 0.012, YS + 0.022, EY - 0.018], body: [0.015, BX - 0.02, EY + 0.022, BY - 0.02], coll: [0.015, 0.985, CY + 0.022, MY - 0.02] };
+  var stat = [], drift = [], fe = [], fh = [];
+  (function init() {
+    var i, x, y;
+    function fill(k, n) { var b = BOXES[k]; for (i = 0; i < n; i++) stat.push({ k: k, x: rnd(b[0], b[1]), y: rnd(b[2], b[3]), vx: 0, vy: 0 }); }
+    fill('em', 9); fill('body', 9); fill('coll', 16);
+    while (drift.length < 12) { x = rnd(0.02, 0.98); y = rnd(YS + 0.03, CY - 0.03); if (!blocked(x, y)) drift.push({ x: x, y: y, vx: 0, vy: 0 }); }
+  })();
+  // Position after travelling a distance d along a polyline, or null past its end.
+  function along(pts, d) {
+    for (var i = 1; i < pts.length; i++) {
+      var dx = pts[i][0] - pts[i - 1][0], dy = pts[i][1] - pts[i - 1][1], l = Math.sqrt(dx * dx + dy * dy);
+      if (d <= l) return [pts[i - 1][0] + dx * d / l, pts[i - 1][1] + dy * d / l];
+      d -= l;
+    }
+    return null;
+  }
+  function ePath() {      // electrons: n+ emitter, channel, under the gate, then down through the drift region
+    var sx = BX + 0.05 + Math.random() * 0.3;
+    return [[rnd(0.22, 0.42), rnd(YS + 0.03, EY - 0.03)], [EX1, YS + 0.014], [BX, YS + 0.014], [sx, YS + 0.03], [sx + rnd(-0.03, 0.03), CY]];
+  }
+  function hPath() {      // holes: p+ collector, up through the drift region, into the p body and out at the emitter contact
+    var x0 = rnd(0.04, 0.96), xb = x0 < BX - 0.05 ? x0 : rnd(0.30, BX - 0.04);
+    return [[x0, CY], [xb, BY], [rnd(0.03, 0.08), rnd(EY + 0.04, BY - 0.04)], [rnd(0.035, 0.085), YS + 0.012]];
+  }
+
+  function step(dt) {
+    var q = Math.sqrt(dt), i, c;
+    stat.forEach(function (c) {
+      var b = BOXES[c.k];
+      c.vx += (Math.random() - 0.5) * 0.5 * q; c.vy += (Math.random() - 0.5) * 0.5 * q;
+      c.vx *= 1 - 1.5 * dt; c.vy *= 1 - 1.5 * dt; c.x += c.vx * dt; c.y += c.vy * dt;
+      if (c.x < b[0]) { c.x = b[0]; c.vx = Math.abs(c.vx); } if (c.x > b[1]) { c.x = b[1]; c.vx = -Math.abs(c.vx); }
+      if (c.y < b[2]) { c.y = b[2]; c.vy = Math.abs(c.vy); } if (c.y > b[3]) { c.y = b[3]; c.vy = -Math.abs(c.vy); }
+    });
+    drift.forEach(function (c) {
+      c.vx += (Math.random() - 0.5) * 0.5 * q; c.vy += (Math.random() - 0.5) * 0.5 * q;
+      c.vx *= 1 - 1.5 * dt; c.vy *= 1 - 1.5 * dt;
+      if (blocked(c.x, c.y)) { c.y += 0.3 * dt; c.x += 0.1 * dt; return; }
+      var nx = c.x + c.vx * dt, ny = c.y + c.vy * dt;
+      if (nx < 0.015 || nx > 0.985) { c.vx = -c.vx; nx = c.x; }
+      if (ny > CY - 0.025) { c.vy = -Math.abs(c.vy); ny = c.y; }
+      if (blocked(nx, ny)) { c.vx = -c.vx; c.vy = Math.abs(c.vy); return; }
+      c.x = nx; c.y = ny;
+    });
+    // flowing carriers
+    var k = Math.min(1, ID / IMAX), base = ID > 1e-6 ? 6 + 22 * Math.sqrt(k) : 0, sp = 0.15 + 0.5 * Math.pow(k, 0.6);
+    var te = Math.min(40, Math.round(base * 2 / (1 + M.BF))), th = Math.min(40, Math.round(base * 2 * M.BF / (1 + M.BF)));
+    [[fe, te, ePath], [fh, th, hPath]].forEach(function (g) {
+      var arr = g[0], live = 0;
+      for (i = arr.length - 1; i >= 0; i--) {
+        c = arr[i];
+        if (c.dead) { c.a -= 3 * dt; if (c.a <= 0) { arr.splice(i, 1); continue; } } else { live++; c.a = Math.min(1, c.a + 3 * dt); }
+        c.d += sp * dt;
+        if (!along(c.p, c.d)) { if (c.dead) { arr.splice(i, 1); } else { c.p = g[2](); c.d = 0; c.a = 0; } }
+      }
+      if (live < g[1]) { c = { p: g[2](), d: 0, a: 0, dead: false }; c.d = Math.random() * 0.9; if (!along(c.p, c.d)) c.d = 0; arr.push(c); }
+      else if (live > g[1]) { for (i = 0; i < arr.length; i++) if (!arr[i].dead) { arr[i].dead = true; break; } }
+    });
+  }
+
+  // ---------- Drawing helpers ----------
+  function arrow(ctx, x1, y1, x2, y2, head) {
+    var a = Math.atan2(y2 - y1, x2 - x1);
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x2, y2);
+    ctx.lineTo(x2 - head * Math.cos(a - 0.45), y2 - head * Math.sin(a - 0.45));
+    ctx.lineTo(x2 - head * Math.cos(a + 0.45), y2 - head * Math.sin(a + 0.45));
+    ctx.closePath(); ctx.fill();
+  }
+  function dot(ctx, px, py, electron) {
+    if (electron) { ctx.fillStyle = col.n; ctx.beginPath(); ctx.arc(px, py, 3.4, 0, 6.2832); ctx.fill(); }
+    else {
+      ctx.fillStyle = col.surface; ctx.strokeStyle = col.p; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(px, py, 3.8, 0, 6.2832); ctx.fill(); ctx.stroke();
+    }
+  }
+
+  // ---------- Drawing: device ----------
+  function drawDevice() {
+    var s = fit(dev, dctx), ctx = dctx, W = s.w;
+    ctx.clearRect(0, 0, W, s.h);
+    var x0 = 14, x1 = W - 14, dw = x1 - x0, y0 = 10, dh = 300;
+    var X = function (nx) { return x0 + nx * dw; }, Y = function (ny) { return y0 + ny * dh; };
+    function box(a, b, c, d, color, alpha) {
+      ctx.fillStyle = col.surface; ctx.fillRect(X(a), Y(c), X(b) - X(a), Y(d) - Y(c));
+      if (alpha) { ctx.fillStyle = color; ctx.globalAlpha = alpha; ctx.fillRect(X(a), Y(c), X(b) - X(a), Y(d) - Y(c)); ctx.globalAlpha = 1; }
+    }
+    var d = dJ(), vov = VG - M.VTH, i;
+    box(0, 1, YS, CY, col.n, 0.09);                       // n− drift region
+    box(0, Math.min(1, BX + d), YS, BY + d, null, 0);     // depletion region around the body junction
+    box(0, BX, YS, BY, col.p, 0.18);                      // p body
+    box(EX0, EX1, YS, EY, col.n, 0.34);                   // n+ emitter
+    box(0, 1, CY, MY, col.p, 0.34);                       // p+ collector layer
+    ctx.setLineDash([4, 4]); ctx.strokeStyle = col.muted; ctx.lineWidth = 1; ctx.beginPath();
+    ctx.moveTo(X(Math.min(1, BX + d)), Y(YS)); ctx.lineTo(X(Math.min(1, BX + d)), Y(BY + d)); ctx.lineTo(X(0), Y(BY + d)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = col.muted; ctx.strokeRect(X(0), Y(YS), X(BX) - X(0), Y(BY) - Y(YS)); ctx.strokeRect(X(EX0), Y(YS), X(EX1) - X(EX0), Y(EY) - Y(YS));
+    ctx.beginPath(); ctx.moveTo(X(0), Y(CY)); ctx.lineTo(X(1), Y(CY)); ctx.stroke();
+    if (vov > 0) {                                        // inversion channel in the body, accumulation layer beyond it
+      var th = 0.008 + 0.022 * Math.min(1, vov / 10);
+      ctx.fillStyle = col.n; ctx.globalAlpha = 0.6; ctx.fillRect(X(EX1), Y(YS), X(BX) - X(EX1), Y(YS + th) - Y(YS));
+      ctx.globalAlpha = 0.28; ctx.fillRect(X(BX), Y(YS), X(0.97) - X(BX), Y(YS + th * 0.7) - Y(YS)); ctx.globalAlpha = 1;
+    }
+    // oxide, gate, emitter and collector metal
+    box(0.44, 0.97, 0.17, YS, col.accent, 0.28);
+    ctx.fillStyle = col.muted;
+    ctx.fillRect(X(0.44), Y(0.09), X(0.97) - X(0.44), Y(0.17) - Y(0.09));
+    ctx.fillRect(X(0.03), Y(0.14), X(0.40) - X(0.03), Y(YS) - Y(0.14));
+    ctx.fillRect(X(0), Y(MY), dw, Y(1) - Y(MY));
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2; ctx.strokeRect(x0, Y(YS), dw, Y(1) - Y(YS));
+    var nq = Math.round(VG * 1.1);
+    if (nq > 0) {
+      ctx.fillStyle = col.surface; ctx.font = '600 13px ' + MONO; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (i = 0; i < nq; i++) ctx.fillText('+', X(0.44) + (X(0.97) - X(0.44)) * (i + 0.5) / nq, Y(0.13));
+    }
+
+    // carriers
+    stat.forEach(function (c) { dot(ctx, X(c.x), Y(c.y), c.k === 'em'); });
+    drift.forEach(function (c) { dot(ctx, X(c.x), Y(c.y), true); });
+    [[fe, true], [fh, false]].forEach(function (g) {
+      g[0].forEach(function (c) { var p = along(c.p, c.d); if (!p) return; ctx.globalAlpha = Math.max(0, c.a); dot(ctx, X(p[0]), Y(p[1]), g[1]); });
+    });
+    ctx.globalAlpha = 1;
+
+    // layer names
+    ctx.textBaseline = 'alphabetic'; ctx.font = '600 13px ' + FONT;
+    ctx.fillStyle = col.n; ctx.textAlign = 'left'; ctx.fillText('n+', X(EX0) + 6, Y(EY) - 7);
+    ctx.textAlign = 'right'; ctx.fillText('n− drift region', X(0.985), Y(CY) - 9);
+    ctx.fillStyle = col.p; ctx.textAlign = 'left'; ctx.fillText('p body', X(0.015), Y(BY) - 8); ctx.fillText('p+ collector layer', X(0.015), Y(MY) - 8);
+    if (vov > 0) { ctx.fillStyle = col.n; ctx.font = '12px ' + FONT; ctx.textAlign = 'center'; ctx.fillText('channel', X((EX1 + BX) / 2), Y(YS) + 26); }
+    // terminals
+    ctx.fillStyle = col.ink; ctx.font = '600 13px ' + FONT; ctx.textAlign = 'center';
+    ctx.fillText('emitter', X(0.215), Y(0.14) - 22); ctx.fillText('gate', X(0.705), Y(0.09) - 21);
+    ctx.font = '12px ' + MONO; ctx.fillStyle = col.muted;
+    ctx.fillText('0 V', X(0.215), Y(0.14) - 7); ctx.fillText(sv(VG, true), X(0.705), Y(0.09) - 6);
+    var cy = y0 + dh + 24;
+    ctx.textAlign = 'left'; ctx.fillStyle = col.ink; ctx.font = '600 13px ' + FONT; ctx.fillText('collector', x0, cy);
+    ctx.font = '12px ' + MONO; ctx.fillStyle = col.muted; ctx.fillText(sv(VDS, true), x0 + 72, cy);
+    ctx.textAlign = 'center'; ctx.font = '12px ' + FONT; ctx.fillText('IG = 0', (x0 + x1) / 2, cy);
+    ctx.textAlign = 'right'; ctx.font = '12px ' + MONO; ctx.fillStyle = col.ink; ctx.fillText('IC ' + fmtI(ID), x1, cy);
+    ctx.fillStyle = col.muted; ctx.textAlign = 'center'; ctx.font = '12px ' + FONT;
+    ctx.fillText(ID > 1e-6 ? 'Electrons enter through the channel; the p+ collector answers with holes.' : 'No current: the body junction blocks the collector voltage.', (x0 + x1) / 2, cy + 26);
+  }
+
+  // ---------- Drawing: characteristics ----------
+  function drawIV() {
+    var s = fit(iv, ictx), ctx = ictx, W = s.w, H = s.h, n = pol === 'n';
+    ctx.clearRect(0, 0, W, H);
+    var L = 46, R = 40, T = 22, B = 38, pw = W - L - R, ph = H - T - B, sc = niceScale(idOf(M.VTH + 10, 10)), ymax = sc.max;
+    var tw = pw * 0.27, xo = L + tw + 24, xr = L + pw;
+    var XG = function (v) { return L + v / (M.VTH + 10) * tw; };
+    var XD = function (v) { return xo + v / 10 * (xr - xo); };
+    var Y = function (I) { return T + ph - I / ymax * ph; };
+    var sg = n ? '' : '−', i, v, y;
+
+    ctx.font = '11px ' + MONO; ctx.lineWidth = 1; ctx.textBaseline = 'middle';
+    sc.ticks.forEach(function (tk) {
+      y = Y(tk.v); ctx.strokeStyle = col.line; ctx.beginPath();
+      ctx.moveTo(L, y); ctx.lineTo(L + tw, y); ctx.moveTo(xo, y); ctx.lineTo(xr, y); ctx.stroke();
+      ctx.fillStyle = col.muted; ctx.textAlign = 'right'; ctx.fillText(tk.s, L - 5, y);
+    });
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
+    (function () { var a = [], q; for (q = 0; q <= M.VTH + 10.001; q += 5) a.push(q); return a; })().forEach(function (g) {
+      var x = XG(g); ctx.strokeStyle = col.line; ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke();
+      ctx.fillStyle = col.muted; ctx.fillText((g ? sg : '') + g, x, T + ph + 15);
+    });
+    [0, 2, 4, 6, 8, 10].forEach(function (d) {
+      var x = XD(d); ctx.strokeStyle = col.line; ctx.beginPath(); ctx.moveTo(x, T); ctx.lineTo(x, T + ph); ctx.stroke();
+      ctx.fillStyle = col.muted; ctx.fillText((d ? sg : '') + d, x, T + ph + 15);
+    });
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 1.2; ctx.beginPath();
+    ctx.moveTo(L, T); ctx.lineTo(L, T + ph); ctx.lineTo(L + tw, T + ph);
+    ctx.moveTo(xo, T); ctx.lineTo(xo, T + ph); ctx.lineTo(xr, T + ph); ctx.stroke();
+    ctx.fillStyle = col.muted; ctx.font = '12px ' + FONT;
+    ctx.textAlign = 'left'; ctx.fillText('gate voltage (V)', L, T + ph + 32);
+    ctx.textAlign = 'right'; ctx.fillText('collector voltage (V)', xr, T + ph + 32);
+    ctx.textAlign = 'left'; ctx.fillText('collector current', L + 4, T - 7);
+    ctx.fillText('on-state', xo + 6, T + 14);
+    ctx.textAlign = 'right'; ctx.fillText('active', xr - 4, T + 14);
+    // threshold marker
+    ctx.setLineDash([2, 3]); ctx.strokeStyle = col.muted; ctx.beginPath(); ctx.moveTo(XG(M.VTH), T + 20); ctx.lineTo(XG(M.VTH), T + ph); ctx.stroke(); ctx.setLineDash([]);
+    ctx.save(); ctx.translate(XG(M.VTH) - 4, T + ph - 6); ctx.rotate(-Math.PI / 2); ctx.textAlign = 'left'; ctx.font = '11px ' + FONT; ctx.fillText('threshold', 0, 0); ctx.restore();
+
+    // pinch-off locus
+    ctx.beginPath();
+    for (v = 0; v <= 10.001; v += 0.2) {      // boundary between on-state and active: the channel is just pinched off
+      var ib = (1 + M.BF) * M.K / 2 * v * v * (1 + M.lam * v), xb = v + vebOf(ib); y = Y(ib);
+      if (v === 0) ctx.moveTo(XD(xb), y); else ctx.lineTo(XD(xb), y);
+    }
+    ctx.setLineDash([5, 4]); ctx.strokeStyle = col.accent; ctx.globalAlpha = 0.7; ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+
+    ctx.save(); ctx.beginPath(); ctx.rect(L, T - 2, W - L, ph + 4); ctx.clip();
+    function outCurve(g) {
+      ctx.beginPath();
+      for (i = 0; i <= 200; i++) { v = 10 * Math.pow(i / 200, 1.6); y = Y(idOf(g, v)); if (i === 0) ctx.moveTo(XD(v), y); else ctx.lineTo(XD(v), y); }
+      ctx.stroke();
+    }
+    ctx.lineJoin = 'round'; ctx.font = '10px ' + MONO; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+    [2.5, 5, 7.5, 10].forEach(function (o) {
+      var g = M.VTH + o;
+      ctx.strokeStyle = col.muted; ctx.globalAlpha = 0.55; ctx.lineWidth = 1; outCurve(g);
+      ctx.globalAlpha = 1; ctx.fillStyle = col.muted; ctx.fillText(sg + parseFloat(g.toFixed(2)) + ' V', xr + 5, Y(idOf(g, 10)));
+    });
+    ctx.textBaseline = 'alphabetic';
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 2.2; outCurve(VG);
+
+    // transfer curves: square law (dashed) and the curve at the present drain voltage (solid)
+    function trCurve(fn) {
+      ctx.beginPath();
+      for (i = 0; i <= 120; i++) { var g = (M.VTH + 10) * i / 120; y = Y(fn(g)); if (i === 0) ctx.moveTo(XG(g), y); else ctx.lineTo(XG(g), y); }
+      ctx.stroke();
+    }
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = col.muted; ctx.lineWidth = 1;
+    trCurve(function (g) { return (1 + M.BF) * M.K / 2 * Math.pow(Math.max(0, g - M.VTH), 2); }); ctx.setLineDash([]);
+    ctx.strokeStyle = col.ink; ctx.lineWidth = 2.2; trCurve(function (g) { return idOf(g, VDS); });
+
+    ctx.restore();
+    // operating point on both plots
+    var py = Y(ID), pxd = XD(VDS), pxg = XG(VG);
+    ctx.setLineDash([3, 3]); ctx.strokeStyle = col.accent; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(pxg, py); ctx.lineTo(pxd, py);
+    ctx.moveTo(pxd, py); ctx.lineTo(pxd, T + ph); ctx.moveTo(pxg, py); ctx.lineTo(pxg, T + ph); ctx.stroke(); ctx.setLineDash([]);
+    [pxd, pxg].forEach(function (px) {
+      ctx.fillStyle = col.accent; ctx.beginPath(); ctx.arc(px, py, 5.5, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = col.surface; ctx.lineWidth = 2; ctx.stroke();
+    });
+    ctx.font = '500 13px ' + MONO; ctx.fillStyle = col.ink;
+    var left = VDS > 5; ctx.textAlign = left ? 'right' : 'left';
+    ctx.fillText(fmtI(ID), pxd + (left ? -10 : 10), Math.max(T + 28, py - 11));
+  }
+
+  // ---------- Text and readouts ----------
+  function updateText() {
+    decor();
+    var vov = VG - M.VTH, pw = VDS * ID, imos = ID / (1 + M.BF);
+    $('vgsOut').textContent = sv(VG, true); $('vdsOut').textContent = sv(VDS, true);
+    $('rID').textContent = fmtI(ID);
+    $('rOV').textContent = vov <= 0 ? 'below' : sv(vov, false);
+    $('rR').textContent = pw < 1e-3 ? '0 W' : (pw >= 100 ? pw.toFixed(0) : pw.toFixed(1)) + ' W';
+    var pill = $('exPill'), title, text;
+    if (reg === 'off' && VG < 0.05) {
+      pill.textContent = 'Cutoff'; pill.className = 'pill off'; title = 'Blocking';
+      text = 'With the gate at 0 V there is no channel. The collector voltage appears across the junction between the p body and the lightly doped n− drift region, which is reverse biased, and its depletion region spreads into the drift region. No current flows. That thick, lightly doped drift region is what lets an IGBT block hundreds of volts.';
+    } else if (reg === 'off') {
+      pill.textContent = 'Cutoff'; pill.className = 'pill off'; title = 'Below threshold';
+      text = 'The gate is still ' + (M.VTH - VG).toFixed(2) + ' V short of the ' + M.VTH.toFixed(2) + ' V threshold, so the surface of the p body under the gate has not inverted and nothing joins the n+ emitter to the drift region. The device is still blocking and the collector current is zero.';
+    } else if (ID < 1e-6) {
+      pill.textContent = 'On-state'; pill.className = 'pill ohm'; title = 'Channel ready, no collector voltage';
+      text = 'The gate has formed a channel, but the collector voltage is too low to forward bias the p+ collector junction, so no holes are injected and no current flows. This is the knee at the foot of every IGBT curve: the device needs about 0.7 V before it conducts.';
+    } else if (reg === 'ohm') {
+      pill.textContent = 'On-state'; pill.className = 'pill ohm'; title = 'Fully on';
+      text = 'The gate is ' + vov.toFixed(2) + ' V beyond threshold and has formed an n-type channel in the p body. Electrons flow from the n+ emitter through the channel into the n− drift region. There they are the base current of the pnp transistor made by the p+ collector, the drift region and the p body, so the collector injects holes in reply. The holes flood the drift region and make it far more conductive than its light doping would allow. This conductivity modulation is why an IGBT has a lower on-state voltage than a MOSFET of the same voltage rating. Of the ' + VDS.toFixed(2) + ' V across the device, ' + VEB.toFixed(2) + ' V is the collector junction drop and ' + VCH.toFixed(2) + ' V is across the channel.';
+    } else {
+      pill.textContent = 'Active'; pill.className = 'pill sat'; title = 'Current set by the gate';
+      text = 'The channel is pinched off. It passes ' + fmtI(imos) + ' of electron current, fixed by the gate voltage through the MOSFET square law, whatever the collector voltage. The pnp section multiplies this by 1 + BF to give ' + fmtI(ID) + ', of which ' + (100 * M.BF / (1 + M.BF)).toFixed(0) + '% is carried by holes. An IGBT only passes through this region while switching or during a short circuit: it is dissipating ' + (pw >= 100 ? pw.toFixed(0) : pw.toFixed(1)) + ' W here and could not stay for long.';
+    }
+    $('exTitle').textContent = title; $('exText').textContent = text;
+    $('exDir').textContent = 'Electrons carry the channel current and holes carry the rest, so both kinds of carrier take part: that is the bipolar in the name. Conventional current flows from collector to emitter, and the insulated gate draws no steady current.';
+  }
+
+  // ---------- SPICE model parameters, editable by the user ----------
+  var HINT = 'Press Enter after editing a value. Scientific notation such as 1e-14 is accepted.';
+  function fmtP(v) {
+    if (v === 0) return '0';
+    var a = Math.abs(v);
+    if (a < 1e-3 || a >= 1e5) return v.toExponential().replace('e+', 'e');
+    return String(parseFloat(v.toPrecision(6)));
+  }
+  // Axis maximum and tick labels for a current axis that must reach m amps.
+  function niceScale(m) {
+    m = Math.max(m, 1e-12);
+    var u = m < 1e-9 ? [1e12, 'pA'] : m < 1e-6 ? [1e9, 'nA'] : m < 1e-3 ? [1e6, 'µA'] : m < 1 ? [1e3, 'mA'] : [1, 'A'];
+    var v = m * u[0], mag = Math.pow(10, Math.floor(Math.log10(v))), n = v / mag;
+    var opt = [[1, 0.2], [2, 0.5], [2.5, 0.5], [4, 1], [5, 1], [6, 2], [8, 2], [10, 2]], i, o = opt[opt.length - 1];
+    for (i = 0; i < opt.length; i++) if (n <= opt[i][0] * 1.0001) { o = opt[i]; break; }
+    var top = o[0] * mag, st = o[1] * mag, ticks = [];
+    for (i = 1; i * st <= top * 1.0001; i++) ticks.push({ v: i * st / u[0], s: parseFloat((i * st).toPrecision(3)) + ' ' + u[1] });
+    return { max: top / u[0], ticks: ticks };
+  }
+  function symbolSvg(title, lines, arrowPath, labels) {
+    var s = '<svg viewBox="0 0 120 96" width="120" height="96" role="img" aria-label="' + title + '"><g transform="translate(18,6)">' +
+      '<path class="sym" d="' + lines + '"/><path class="symf" d="' + arrowPath + '"/></g>';
+    labels.forEach(function (l) { s += '<text x="' + l[1] + '" y="' + l[2] + '" text-anchor="' + (l[3] || 'start') + '">' + l[0] + '</text>'; });
+    return s + '</svg>';
+  }
+  var decorKey = '';
+  function decor() {
+    var d = describe(), key = d.model + d.symbol;
+    if (key === decorKey) return;
+    decorKey = key; $('mline').textContent = d.model; $('sym').innerHTML = d.symbol; $('mdl').innerHTML = d.circuit;
+  }
+  function buildParams() {
+    var grid = $('pgrid');
+    SPEC.forEach(function (p) {
+      var l = document.createElement('label'); l.className = 'pf';
+      var b = document.createElement('b'); b.textContent = p.k;
+      var sp = document.createElement('span'); sp.textContent = p.d;
+      var inp = document.createElement('input'); inp.type = 'text'; inp.inputMode = 'decimal'; inp.id = 'p_' + p.k;
+      inp.autocomplete = 'off'; inp.value = fmtP(P[p.k]);
+      inp.addEventListener('change', function () {
+        var v = parseFloat(inp.value.replace(',', '.'));
+        if (!isFinite(v) || v < p.min || v > p.max) {
+          inp.classList.add('bad');
+          $('perr').textContent = p.k + ' must be a number from ' + fmtP(p.min) + ' to ' + fmtP(p.max) + '.';
+          return;
+        }
+        inp.classList.remove('bad'); $('perr').textContent = HINT;
+        P[p.k] = v; inp.value = fmtP(v); applyParams();
+      });
+      l.appendChild(b); l.appendChild(sp); l.appendChild(inp); grid.appendChild(l);
+    });
+    $('perr').textContent = HINT;
+    $('pReset').addEventListener('click', function () {
+      SPEC.forEach(function (p) { P[p.k] = p.def; var e = $('p_' + p.k); e.value = fmtP(p.def); e.classList.remove('bad'); });
+      $('perr').textContent = HINT; applyParams();
+    });
+  }
+  function liveEq() {
+    if (reg === 'off') return '<i>V</i><sub>GE</sub> = ' + VG.toFixed(2) + ' V ≤ VTO = ' + M.VTH.toFixed(2) + ' V, so <i>I</i><sub>C</sub> = 0';
+    return '<i>V</i><sub>CE</sub> = ' + VDS.toFixed(2) + ' V = ' + VCH.toFixed(2) + ' V (channel) + ' + VEB.toFixed(2) + ' V (collector junction); <i>I</i><sub>MOS</sub> = ' + fmtI(ID / (1 + M.BF)) +
+      ', <i>I</i><sub>C</sub> = (1 + ' + fmtP(P.BF) + ') × ' + fmtI(ID / (1 + M.BF)) + ' = ' + fmtI(ID);
+  }
+  // ---------- Equations, equivalent circuit and region pill ----------
+  function circuitSvg(kind, flip, t, src, cap) {
+    function tx(x, y, str, anchor) { return '<text x="' + x + '" y="' + y + '" text-anchor="' + (anchor || 'start') + '">' + str + '</text>'; }
+    function sub(m, sb) { return m + '<tspan dy="4" font-size="10">' + sb + '</tspan>'; }
+    var s = '<svg viewBox="0 0 230 200" width="230" height="200" role="img" aria-label="' + cap + '">';
+    if (kind === 'diode') {
+      s += '<path class="sym" d="M20 100H92M124 100H206M124 82V118M34 80H62"/><path class="symf" d="M92 82V118L124 100Z"/><path class="symf" d="M66 80L57 75.5V84.5Z"/>';
+      s += tx(49, 68, sub('I', 'D'), 'middle') + tx(20, 124, 'A') + tx(206, 124, 'K', 'end') + tx(66, 152, '+') + tx(108, 152, sub('V', 'D'), 'middle') + tx(146, 152, '−');
+    } else {
+      s += '<path class="sym" d="M170 12V78M170 122V188"/><circle class="sym" cx="170" cy="100" r="22"/>';
+      s += flip ? '<path class="sym" d="M170 114V94"/><path class="symf" d="M170 85L165 95H175Z"/>'
+                : '<path class="sym" d="M170 86V106"/><path class="symf" d="M170 115L165 105H175Z"/>';
+      s += tx(200, 104, src) + tx(180, 22, t[1]) + tx(180, 186, t[2]) + tx(24, 92, t[0]);
+      if (kind === 'three') {
+        s += '<path class="sym" d="M24 100H80M80 100V40H170M80 100V160H170"/>';
+        s += flip ? '<path class="symf" d="M70 62H90L80 78Z"/><path class="sym" d="M70 78H90"/><path class="symf" d="M70 138H90L80 122Z"/><path class="sym" d="M70 122H90"/>'
+                  : '<path class="symf" d="M70 78H90L80 62Z"/><path class="sym" d="M70 62H90"/><path class="symf" d="M70 122H90L80 138Z"/><path class="sym" d="M70 138H90"/>';
+        s += '<circle class="symf" cx="80" cy="100" r="3"/><circle class="symf" cx="170" cy="40" r="3"/><circle class="symf" cx="170" cy="160" r="3"/>';
+        s += tx(62, 74, sub('D', t[0] + t[1]), 'end') + tx(62, 134, sub('D', t[0] + t[2]), 'end');
+      } else {
+        s += '<path class="sym" d="M24 100H94"/><circle class="sym" cx="99" cy="100" r="5"/>';
+        s += tx(99, 128, sub('I', 'G') + '<tspan dy="-4"> = 0</tspan>', 'middle');
+      }
+    }
+    return s + '</svg><figcaption>' + cap + '</figcaption>';
+  }
+  function syncReg() {
+    var p = $('exPill'), q = $('ivPill'), key = p.className.split(' ')[1];
+    q.textContent = p.textContent; q.className = p.className;
+    Array.prototype.forEach.call(document.querySelectorAll('.eqrow[data-reg]'), function (r) {
+      r.classList.toggle('on', r.getAttribute('data-reg').split(' ').indexOf(key) >= 0);
+    });
+    $('eqLive').innerHTML = 'With the present settings: <span class="eq">' + liveEq() + '</span>';
+  }
+  var baseUpdateText = updateText;
+  updateText = function () { baseUpdateText(); syncReg(); };
+  function describe() {
+    function tx(x, y, str, anchor) { return '<text x="' + x + '" y="' + y + '" text-anchor="' + (anchor || 'start') + '">' + str + '</text>'; }
+    var cap = 'Equivalent circuit: an n-channel MOSFET supplies the base current of a pnp transistor. The emitter of the pnp transistor is the collector terminal of the IGBT.';
+    var circuit = '<svg viewBox="0 0 230 214" width="230" height="214" role="img" aria-label="' + cap + '">' +
+      '<path class="sym" d="M166 12V54L140 72M140 62V98M140 88L166 106V190H90V150H70M70 116V156M62 116V156M24 136H62M70 122H90V80H140M128 190V204"/>' +
+      '<path class="symf" d="M144 69.2L154.8 67.2L149.7 59.8Z"/>' +
+      '<circle class="symf" cx="128" cy="190" r="3"/>' +
+      tx(176, 22, 'C') + tx(138, 208, 'E') + tx(24, 128, 'G') + tx(176, 84, 'pnp') + tx(98, 74, 'I<tspan dy="4" font-size="10">MOS</tspan>') + tx(28, 176, 'MOSFET') +
+      '</svg><figcaption>' + cap + '</figcaption>';
+    return {
+      model: '.model M1 NMOS(LEVEL=1 VTO=' + fmtP(P.VTO) + ' KP=' + fmtP(P.KP) + ' LAMBDA=' + fmtP(P.LAMBDA) + ')   .model Q1 PNP(IS=' + fmtP(P.IS) + ' BF=' + fmtP(P.BF) + ')',
+      circuit: circuit,
+      symbol: symbolSvg('IGBT symbol with gate G, collector C and emitter E', 'M6 42H28M28 26V58M34 22V62M34 34L58 18V6M34 50L58 66V78', 'M58 66L46.5 64.5L51 57Z', [['G', 22, 40], ['C', 84, 18], ['E', 84, 84]])
+    };
+  }
+  function applyParams() {
+    M.VTH = P.VTO; M.K = P.KP; M.lam = P.LAMBDA; M.BF = P.BF; M.IS = P.IS;
+    IMAX = Math.max(1e-6, idOf(M.VTH + 10, 10));
+    var e = $('vgs'); e.max = (M.VTH + 10).toFixed(1);
+    VG = Math.min(VG, M.VTH + 10); e.value = VG;
+    refresh();
+  }
+
+  // ---------- Controls ----------
+  function refresh() { recompute(); updateText(); if (paused) render(); }
+  $('vgs').addEventListener('input', function (ev) { VG = parseFloat(ev.target.value); refresh(); });
+  $('vds').addEventListener('input', function (ev) { VDS = parseFloat(ev.target.value); refresh(); });
+  $('presets').addEventListener('click', function (ev) {
+    var b = ev.target.closest('button'); if (!b) return;
+    VG = Math.max(0, M.VTH + parseFloat(b.dataset.g)); VDS = parseFloat(b.dataset.v);
+    $('vgs').value = VG; $('vds').value = VDS; refresh();
+  });
+  var last = 0;
+  function setPaused(p) {
+    paused = p; var b = $('pause');
+    b.textContent = p ? 'Play' : 'Pause'; b.setAttribute('aria-pressed', p ? 'true' : 'false');
+    last = 0;
+  }
+  $('pause').addEventListener('click', function () { setPaused(!paused); });
+
+  // ---------- Loop ----------
+  function render() { drawDevice(); drawIV(); }
+  function frame(t) {
+    if (!paused) {
+      var dt = last ? Math.min(0.05, (t - last) / 1000) : 0.016; last = t;
+      step(dt);
+    }
+    render();
+    requestAnimationFrame(frame);
+  }
+  buildParams(); applyParams();
+  if (reduced) setPaused(true);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
